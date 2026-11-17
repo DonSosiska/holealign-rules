@@ -1,0 +1,6 @@
+# OSV ecosystems the bot searches, one per line (comments with #).
+# Verify each spelling against the ecosystem list in the OSV schema before editing:
+# https://ossf.github.io/osv-schema/#affectedpackage-field
+Debian:12
+Ubuntu:24.04:LTS
+Alpine:v3.20

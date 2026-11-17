@@ -1,0 +1,42 @@
+name: validate
+
+# pull_request (never pull_request_target): fork PRs run with a read-only token and
+# no secrets. Validation needs none: the panoptes code repository is public.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Shell checks
+        run: shellcheck scripts/*.sh
+
+      - name: Build panoptes-server
+        id: panoptes
+        uses: ./.github/actions/build-panoptes
+
+      # Validates every rule, runs the tests and applies the coverage policy
+      # (one exploitable and one non-exploitable case per rule). Rules must be
+      # status: reviewed, so an unreviewed bot draft fails here by design.
+      - name: Validate rules and tests
+        env:
+          PANOPTES_SERVER: ${{ steps.panoptes.outputs.bin }}
+          OUT_DIR: ${{ runner.temp }}/out
+        run: |
+          set -euo pipefail
+          "$PANOPTES_SERVER" rules build -rules rules -tests tests -seq 1 -out "$OUT_DIR"

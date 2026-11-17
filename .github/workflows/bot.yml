@@ -1,0 +1,81 @@
+name: bot
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      max:
+        description: Maximum number of drafts (pull requests) this run
+        default: "20"
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bot
+  cancel-in-progress: false
+
+jobs:
+  draft:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write        # push bot/* branches
+      pull-requests: write   # open pull requests and the label
+    env:
+      PANOPTES_LLM_PROVIDER: anthropic
+      PANOPTES_LLM_MODEL: claude-sonnet-5-5
+      PANOPTES_LLM_API_KEY: ${{ secrets.PANOPTES_LLM_API_KEY }}
+      MAX_INPUT: ${{ inputs.max }}
+    steps:
+      - name: Check configuration
+        id: gate
+        run: |
+          set -euo pipefail
+          if [[ -z "$PANOPTES_LLM_API_KEY" ]]; then
+            echo "::notice::PANOPTES_LLM_API_KEY is not set; the bot is disabled"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          max="${MAX_INPUT:-20}"
+          if [[ ! "$max" =~ ^[0-9]+$ ]] || (( max < 1 || max > 100 )); then
+            echo "::error::max must be a number between 1 and 100"
+            exit 1
+          fi
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+          echo "max=$max" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: steps.gate.outputs.enabled == 'true'
+        with:
+          fetch-depth: 0
+          persist-credentials: true   # scripts/bot-drafts.sh pushes bot/* branches
+
+      - name: Build panoptes-server
+        if: steps.gate.outputs.enabled == 'true'
+        id: panoptes
+        uses: ./.github/actions/build-panoptes
+
+      - name: Find candidates
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          PANOPTES_SERVER: ${{ steps.panoptes.outputs.bin }}
+          MAX: ${{ steps.gate.outputs.max }}
+          CANDIDATES: ${{ runner.temp }}/candidates.json
+        run: |
+          set -euo pipefail
+          ecosystems="$(grep -v '^[[:space:]]*#' coverage/ecosystems.txt | grep -v '^[[:space:]]*$' | paste -sd, -)"
+          "$PANOPTES_SERVER" rules candidates -rules rules -packages coverage/packages.txt \
+            -ecosystems "$ecosystems" -since 30d -max "$MAX" -out "$CANDIDATES"
+
+      - name: Draft rules and open pull requests
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          PANOPTES_SERVER: ${{ steps.panoptes.outputs.bin }}
+          MAX: ${{ steps.gate.outputs.max }}
+          CANDIDATES: ${{ runner.temp }}/candidates.json
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash scripts/bot-drafts.sh "$CANDIDATES" "$MAX"

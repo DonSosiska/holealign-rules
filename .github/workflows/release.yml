@@ -1,0 +1,116 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "rules/**"
+      - "tests/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One publish at a time; never cancel one in flight.
+concurrency:
+  group: rules-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Holds RULES_SIGNING_KEY. Configure required reviewers and restrict deployment
+    # branches to main under Settings > Environments > rules-release.
+    environment: rules-release
+    permissions:
+      contents: write   # GitHub release, tag and the gh-pages branch
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0   # tags, for the sequence number
+          persist-credentials: true   # scripts/publish-pages.sh pushes gh-pages
+
+      - name: Require the public key
+        run: |
+          set -euo pipefail
+          if [[ ! -s keys/rules-public.key ]]; then
+            echo "::error::keys/rules-public.key is missing; generate the signing key and commit its public half first (see keys/README.md)"
+            exit 1
+          fi
+
+      - name: Build panoptes-server
+        id: panoptes
+        uses: ./.github/actions/build-panoptes
+
+      - name: Next sequence number
+        id: seq
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: echo "seq=$(bash scripts/next-seq.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Build bundle
+        env:
+          PANOPTES_SERVER: ${{ steps.panoptes.outputs.bin }}
+          SEQ: ${{ steps.seq.outputs.seq }}
+          DIST: ${{ runner.temp }}/dist
+        run: |
+          set -euo pipefail
+          SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          export SOURCE_DATE_EPOCH
+          "$PANOPTES_SERVER" rules build -rules rules -tests tests -seq "$SEQ" -out "$DIST"
+
+      - name: Sign bundle
+        env:
+          PANOPTES_SERVER: ${{ steps.panoptes.outputs.bin }}
+          SEQ: ${{ steps.seq.outputs.seq }}
+          DIST: ${{ runner.temp }}/dist
+          KEY_FILE: ${{ runner.temp }}/rules-signing.key
+          RULES_SIGNING_KEY: ${{ secrets.RULES_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$RULES_SIGNING_KEY" ]]; then
+            echo "::error::secret RULES_SIGNING_KEY is not set in the rules-release environment"
+            exit 1
+          fi
+          umask 077
+          printf '%s\n' "$RULES_SIGNING_KEY" > "$KEY_FILE"
+          "$PANOPTES_SERVER" rules sign -key "$KEY_FILE" "$DIST/rules-$SEQ.tar.gz"
+
+      - name: Remove signing key
+        if: always()
+        env:
+          KEY_FILE: ${{ runner.temp }}/rules-signing.key
+        run: rm -f "$KEY_FILE"
+
+      - name: Verify signature with the published public key
+        env:
+          PANOPTES_SERVER: ${{ steps.panoptes.outputs.bin }}
+          SEQ: ${{ steps.seq.outputs.seq }}
+          DIST: ${{ runner.temp }}/dist
+        run: |
+          set -euo pipefail
+          pub="$(tr -d '[:space:]' < keys/rules-public.key)"
+          "$PANOPTES_SERVER" rules verify -pub "$pub" "$DIST/rules-$SEQ.tar.gz"
+          ls -l "$DIST"
+
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SEQ: ${{ steps.seq.outputs.seq }}
+          DIST: ${{ runner.temp }}/dist
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          gh release create "rules-$SEQ" \
+            "$DIST/rules-$SEQ.tar.gz" "$DIST/rules-$SEQ.tar.gz.sig" "$DIST/latest.json" \
+            --target "$SHA" --title "rules-$SEQ" \
+            --notes "Signed rules bundle $SEQ built from commit $SHA."
+
+      - name: Publish to GitHub Pages
+        env:
+          SEQ: ${{ steps.seq.outputs.seq }}
+          DIST: ${{ runner.temp }}/dist
+        run: bash scripts/publish-pages.sh "$DIST" "$SEQ"

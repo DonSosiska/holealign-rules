@@ -1,0 +1,43 @@
+name: Build panoptes-server
+description: Check out DonSosiska/panoptes at the commit in PANOPTES_REF and build panoptes-server.
+outputs:
+  bin:
+    description: Absolute path of the built panoptes-server binary
+    value: ${{ steps.build.outputs.bin }}
+runs:
+  using: composite
+  steps:
+    - name: Read PANOPTES_REF
+      id: ref
+      shell: bash
+      run: |
+        set -euo pipefail
+        sha="$(grep -v '^[[:space:]]*#' PANOPTES_REF | grep -v '^[[:space:]]*$' | head -n 1 | tr -d '[:space:]')"
+        if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+          echo "::error::PANOPTES_REF must hold a full 40-character commit SHA"
+          exit 1
+        fi
+        echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      with:
+        repository: DonSosiska/panoptes
+        ref: ${{ steps.ref.outputs.sha }}
+        path: panoptes
+        persist-credentials: false
+
+    - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+      with:
+        go-version-file: panoptes/go.mod
+        cache-dependency-path: panoptes/go.sum
+
+    - name: Build panoptes-server
+      id: build
+      shell: bash
+      env:
+        OUT_DIR: ${{ runner.temp }}/bin
+      run: |
+        set -euo pipefail
+        mkdir -p "$OUT_DIR"
+        (cd panoptes && CGO_ENABLED=0 go build -trimpath -o "$OUT_DIR/panoptes-server" ./cmd/panoptes-server)
+        echo "bin=$OUT_DIR/panoptes-server" >> "$GITHUB_OUTPUT"

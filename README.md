@@ -73,10 +73,10 @@ rules:
     enabled: true
     url: https://donsosiska.github.io/panoptes-rules/latest.json
     trusted_keys:
-      - "<PUBLIC_KEY>"    # contents of keys/rules-public.key
+      - "UuFW4nYSCwI3xfHhwapVhYrjYhVO6i7yaxOTv9KFCuM="    # contents of keys/rules-public.key
 ```
 
-`<PUBLIC_KEY>` is the base64 key in [`keys/rules-public.key`](keys/) (see [keys/README.md](keys/README.md)).
+`UuFW4nYSCwI3xfHhwapVhYrjYhVO6i7yaxOTv9KFCuM=` is the base64 key in [`keys/rules-public.key`](keys/) (see [keys/README.md](keys/README.md)).
 Bundles are also attached to the GitHub releases `rules-<seq>` for air-gapped servers
 (`panoptes-server rules import`).
 

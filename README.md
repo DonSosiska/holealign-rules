@@ -107,6 +107,9 @@ so CI does not start on them by itself; push a commit or close and reopen to tri
 Source-package selectors (`{source: <package>, type: deb}`) are common in bot drafts: one rule covers all
 binary packages of that source.
 
+The bot calls Anthropic through workload identity federation; no API key is stored. Maintainer setup:
+[docs/bot-setup.md](docs/bot-setup.md).
+
 ## Releases
 
 On every merge that changes rules or tests, the release workflow builds a deterministic bundle,

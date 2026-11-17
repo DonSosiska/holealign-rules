@@ -4,8 +4,13 @@
 # usage: scripts/bot-drafts.sh <candidates.json> <max>
 #
 # Environment: PANOPTES_SERVER (path to panoptes-server), GH_TOKEN, and the
-# PANOPTES_LLM_* variables read by "rules draft". Run from a checkout of this
-# repository whose origin allows pushing, on a clean tree.
+# PANOPTES_LLM_* variables read by "rules draft". The LLM is reached through workload
+# identity federation: ANTHROPIC_FEDERATION_RULE_ID, ANTHROPIC_ORGANIZATION_ID,
+# ANTHROPIC_SERVICE_ACCOUNT_ID, ANTHROPIC_IDENTITY_TOKEN_FILE (and optionally
+# ANTHROPIC_WORKSPACE_ID). In GitHub Actions the token file is refreshed from
+# ACTIONS_ID_TOKEN_REQUEST_URL, with the audience in ANTHROPIC_OIDC_AUDIENCE.
+# No API key may be set. Run from a checkout of this repository whose origin allows
+# pushing, on a clean tree.
 #
 # DRY_RUN=1 only lists the candidates and whether each would be drafted. It touches
 # neither git, GitHub nor the LLM.
@@ -59,6 +64,42 @@ if [[ "${DRY_RUN:-0}" == 1 ]]; then
   exit 0
 fi
 
+# A static key would take precedence over workload identity federation in the SDK.
+for v in ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_PROFILE PANOPTES_LLM_API_KEY; do
+  if [[ -n "${!v:-}" ]]; then
+    echo "error: $v is set; unset it so that workload identity federation is used" >&2
+    exit 2
+  fi
+done
+
+# GitHub OIDC tokens expire after a few minutes. Re-fetch the token file when it is older
+# than four minutes. Only GitHub Actions sets ACTIONS_ID_TOKEN_REQUEST_URL, so elsewhere
+# the token file is used as it is. Any failure here stops the run: "rules draft" would
+# fail for every candidate without a valid token.
+refresh_identity_token() {
+  if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]]; then
+    return 0
+  fi
+  local jwt="${ANTHROPIC_IDENTITY_TOKEN_FILE:?ANTHROPIC_IDENTITY_TOKEN_FILE is required}"
+  if [[ -f "$jwt" && -z "$(find "$jwt" -mmin +4 -print -quit)" ]]; then
+    return 0
+  fi
+  : "${ANTHROPIC_OIDC_AUDIENCE:?ANTHROPIC_OIDC_AUDIENCE is required}"
+  local url="$ACTIONS_ID_TOKEN_REQUEST_URL" sep='?' aud response token
+  if [[ "$url" == *\?* ]]; then sep='&'; fi
+  aud="$(jq -rn --arg a "$ANTHROPIC_OIDC_AUDIENCE" '$a | @uri')"
+  response="$(curl --fail --silent --show-error \
+    -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:?}" \
+    "${url}${sep}audience=${aud}")"
+  token="$(jq -r '.value // empty' <<<"$response")"
+  if [[ -z "$token" ]]; then
+    echo "::error::GitHub did not return an OIDC token" >&2
+    exit 1
+  fi
+  echo "::add-mask::$token"
+  (umask 077 && printf '%s' "$token" > "$jwt.tmp" && mv -f "$jwt.tmp" "$jwt")
+}
+
 bot_name="github-actions[bot]"
 bot_email="41898282+github-actions[bot]@users.noreply.github.com"
 work="$(mktemp -d)"
@@ -100,6 +141,7 @@ for ((i = 0; i < total && created < max; i++)); do
 
   body="$work/body-$i.md"
   rc=0
+  refresh_identity_token
   "$PANOPTES_SERVER" rules draft -candidate-file "$cand" -index "$i" \
     -rules rules -tests tests -out-rules rules -out-tests tests > "$body" || rc=$?
   case "$rc" in

@@ -17,6 +17,8 @@ concurrency:
   group: bot
   cancel-in-progress: false
 
+# No API key is stored anywhere. The job exchanges a GitHub OIDC token for Anthropic
+# credentials through workload identity federation; see docs/bot-setup.md.
 jobs:
   draft:
     runs-on: ubuntu-latest
@@ -24,18 +26,23 @@ jobs:
     permissions:
       contents: write        # push bot/* branches
       pull-requests: write   # open pull requests and the label
+      id-token: write        # GitHub OIDC token for Anthropic workload identity federation
     env:
       PANOPTES_LLM_PROVIDER: anthropic
       PANOPTES_LLM_MODEL: claude-sonnet-5-5
-      PANOPTES_LLM_API_KEY: ${{ secrets.PANOPTES_LLM_API_KEY }}
       MAX_INPUT: ${{ inputs.max }}
     steps:
       - name: Check configuration
         id: gate
+        env:
+          FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          OIDC_AUDIENCE: ${{ vars.ANTHROPIC_OIDC_AUDIENCE }}
         run: |
           set -euo pipefail
-          if [[ -z "$PANOPTES_LLM_API_KEY" ]]; then
-            echo "::notice::PANOPTES_LLM_API_KEY is not set; the bot is disabled"
+          if [[ -z "$FEDERATION_RULE_ID" || -z "$ORGANIZATION_ID" || -z "$SERVICE_ACCOUNT_ID" || -z "$OIDC_AUDIENCE" ]]; then
+            echo "::notice::bot disabled: workload identity variables are not set"
             echo "enabled=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -85,6 +92,46 @@ jobs:
           "$PANOPTES_SERVER" rules candidates -rules rules -packages coverage/packages.txt \
             -ecosystems "$ecosystems" -since 30d -max "$MAX" -cache "$OSV_CACHE" -out "$CANDIDATES"
 
+      # GitHub OIDC tokens live only a few minutes, so this runs right before drafting.
+      # scripts/bot-drafts.sh re-fetches the token inside its loop when it gets old.
+      # The token goes to a file (never to the environment); the IDs are not secret.
+      - name: Obtain Anthropic identity token
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          OIDC_AUDIENCE: ${{ vars.ANTHROPIC_OIDC_AUDIENCE }}
+          FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          WORKSPACE_ID: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+        run: |
+          set -euo pipefail
+          umask 077
+          jwt="$RUNNER_TEMP/anthropic-oidc.jwt"
+          url="$ACTIONS_ID_TOKEN_REQUEST_URL"
+          sep='?'
+          if [[ "$url" == *\?* ]]; then sep='&'; fi
+          aud="$(jq -rn --arg a "$OIDC_AUDIENCE" '$a | @uri')"
+          response="$(curl --fail --silent --show-error \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${url}${sep}audience=${aud}")"
+          token="$(jq -r '.value // empty' <<<"$response")"
+          if [[ -z "$token" ]]; then
+            echo "::error::GitHub did not return an OIDC token"
+            exit 1
+          fi
+          echo "::add-mask::$token"
+          printf '%s' "$token" > "$jwt.tmp"
+          mv -f "$jwt.tmp" "$jwt"
+          {
+            echo "ANTHROPIC_IDENTITY_TOKEN_FILE=$jwt"
+            echo "ANTHROPIC_FEDERATION_RULE_ID=$FEDERATION_RULE_ID"
+            echo "ANTHROPIC_ORGANIZATION_ID=$ORGANIZATION_ID"
+            echo "ANTHROPIC_SERVICE_ACCOUNT_ID=$SERVICE_ACCOUNT_ID"
+            if [[ -n "$WORKSPACE_ID" ]]; then
+              echo "ANTHROPIC_WORKSPACE_ID=$WORKSPACE_ID"
+            fi
+          } >> "$GITHUB_ENV"
+
       - name: Draft rules and open pull requests
         if: steps.gate.outputs.enabled == 'true'
         env:
@@ -93,4 +140,9 @@ jobs:
           CANDIDATES: ${{ runner.temp }}/candidates.json
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          ANTHROPIC_OIDC_AUDIENCE: ${{ vars.ANTHROPIC_OIDC_AUDIENCE }}
         run: bash scripts/bot-drafts.sh "$CANDIDATES" "$MAX"
+
+      - name: Remove Anthropic identity token
+        if: always()
+        run: rm -f -- "$RUNNER_TEMP/anthropic-oidc.jwt" "$RUNNER_TEMP/anthropic-oidc.jwt.tmp"

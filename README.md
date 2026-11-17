@@ -40,6 +40,11 @@ source: user
 references: [https://...]
 ```
 
+Package selectors are `{name, type}` (name is a glob on the binary package) or `{source, type}` (the
+source package, exact name). A source selector covers every binary package built from that source:
+`packages: [{source: openssl, type: deb}]` matches `openssl` and `libssl3` alike. Inside the expression
+`pkg["name"]` and `pkg["source"]` tell the binaries apart.
+
 Version ranges are already handled by the scanner, so rules express reachability with facts, never
 with `true`. Facts must exist in the Panoptes fact catalog and be collected by the agent. Requests for
 files (`file.match`) are restricted and must not target sensitive paths.
@@ -89,11 +94,18 @@ trusts the feed key, so reviewers check the rule against the advisory, not just 
 
 ### Bot drafts
 
-A daily workflow picks recent advisories for the packages in `coverage/packages.txt`, asks an LLM to
-draft a rule and tests, and opens a pull request labelled `bot-draft`. Drafts are LLM-generated: they
-can be wrong, and they are `status: draft` (so CI fails until a human sets `reviewed`). Check every
-condition against the advisory before approving. Bot pull requests are created with the workflow
-token, so CI does not start on them automatically; push a commit or close and reopen to trigger it.
+A daily workflow picks recent advisories for the source packages in `coverage/packages.txt` on the
+ecosystems in `coverage/ecosystems.txt` (by default Debian 12 and Alpine 3.20; Ubuntu is left out because
+its OSV bulk export is about 820 MB and querying it package by package is slow). It asks an LLM to draft
+a rule and tests for each candidate, and opens a pull request labelled `bot-draft`, branch
+`bot/<vuln>-<source>`.
+
+Drafts are LLM-generated and can be wrong. They are written with `status: draft`, so CI fails on them
+until a reviewer has checked every condition against the advisory and set `status: reviewed`. That
+commit is what triggers CI on the pull request. Bot pull requests are created with the workflow token,
+so CI does not start on them by itself; push a commit or close and reopen to trigger it the first time.
+Source-package selectors (`{source: <package>, type: deb}`) are common in bot drafts: one rule covers all
+binary packages of that source.
 
 ## Releases
 

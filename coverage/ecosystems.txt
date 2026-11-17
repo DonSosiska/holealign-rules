@@ -1,6 +1,9 @@
 # OSV ecosystems the bot searches, one per line (comments with #).
 # Verify each spelling against the ecosystem list in the OSV schema before editing:
 # https://ossf.github.io/osv-schema/#affectedpackage-field
+#
+# Ubuntu:24.04:LTS is left out on purpose: it is supported, but its bulk export is about 820 MB, so
+# the bot would query it package by package through the OSV API, which is slow. Add it back when that
+# cost is acceptable.
 Debian:12
-Ubuntu:24.04:LTS
 Alpine:v3.20

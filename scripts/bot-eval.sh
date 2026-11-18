@@ -38,7 +38,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib-oidc.sh"
 mkdir -p "$out"
 refresh_identity_token
 # Keep the token file fresh while the evaluation runs (it can take tens of minutes).
-( while sleep 30; do refresh_identity_token; done ) &
+( while sleep 60; do refresh_identity_token; done ) &
 refresher=$!
 trap 'kill "$refresher" 2>/dev/null || true' EXIT
 

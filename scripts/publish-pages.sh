@@ -92,8 +92,8 @@ done
 {
   echo '<!doctype html>'
   echo '<meta charset="utf-8">'
-  echo '<title>Panoptes rules feed</title>'
-  echo '<h1>Panoptes rules feed</h1>'
+  echo '<title>Holealign rules feed</title>'
+  echo '<h1>Holealign rules feed</h1>'
   echo '<p>Servers poll <a href="latest.json">latest.json</a>. Bundles are signed (ed25519); verify them against the public key published in the repository.</p>'
   echo '<ul>'
   for n in "${kept[@]}"; do

@@ -42,8 +42,8 @@ jobs:
       pull-requests: write   # open pull requests and the label
       id-token: write        # GitHub OIDC token for Anthropic workload identity federation
     env:
-      PANOPTES_LLM_PROVIDER: anthropic
-      PANOPTES_LLM_MODEL: claude-sonnet-5-5
+      HOLEALIGN_LLM_PROVIDER: anthropic
+      HOLEALIGN_LLM_MODEL: claude-sonnet-5-5
       MAX_INPUT: ${{ inputs.max }}
     steps:
       - name: Check configuration
@@ -74,10 +74,10 @@ jobs:
           fetch-depth: 0
           persist-credentials: false   # scripts/bot-drafts.sh passes the token to the push only
 
-      - name: Build panoptes-server
+      - name: Build holealign-server
         if: steps.gate.outputs.enabled == 'true'
-        id: panoptes
-        uses: ./.github/actions/build-panoptes
+        id: holealign
+        uses: ./.github/actions/build-holealign
 
       - name: Week of the OSV cache
         if: steps.gate.outputs.enabled == 'true'
@@ -95,7 +95,7 @@ jobs:
       - name: Find candidates
         if: steps.gate.outputs.enabled == 'true'
         env:
-          PANOPTES_SERVER: ${{ steps.panoptes.outputs.bin }}
+          HOLEALIGN_SERVER: ${{ steps.holealign.outputs.bin }}
           MAX: ${{ steps.gate.outputs.max }}
           CANDIDATES: ${{ runner.temp }}/candidates.json
           OSV_CACHE: ${{ runner.temp }}/osv-cache
@@ -106,7 +106,7 @@ jobs:
           # It parses untrusted OSV/KEV data: no GitHub or OIDC credentials in its environment.
           env -u GH_TOKEN -u GITHUB_TOKEN \
             -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL \
-            "$PANOPTES_SERVER" rules candidates -rules rules -packages coverage/packages.txt \
+            "$HOLEALIGN_SERVER" rules candidates -rules rules -packages coverage/packages.txt \
             -ecosystems "$ecosystems" -since 30d -max "$MAX" -cache "$OSV_CACHE" -out "$CANDIDATES"
 
       # Only identifiers (not secret) and the token file path. scripts/bot-drafts.sh fetches the
@@ -133,7 +133,7 @@ jobs:
       - name: Draft rules and open pull requests
         if: steps.gate.outputs.enabled == 'true'
         env:
-          PANOPTES_SERVER: ${{ steps.panoptes.outputs.bin }}
+          HOLEALIGN_SERVER: ${{ steps.holealign.outputs.bin }}
           MAX: ${{ steps.gate.outputs.max }}
           CANDIDATES: ${{ runner.temp }}/candidates.json
           BOT_TOKEN: ${{ github.token }}   # the script uses it only for git push and gh, never for the drafter
@@ -155,7 +155,7 @@ jobs:
       contents: read
       id-token: write        # GitHub OIDC token for Anthropic workload identity federation
     env:
-      PANOPTES_LLM_PROVIDER: anthropic
+      HOLEALIGN_LLM_PROVIDER: anthropic
       VARIANTS: ${{ inputs.variants }}
       RUNS: ${{ inputs.runs }}
     steps:
@@ -176,9 +176,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Build panoptes-server
-        id: panoptes
-        uses: ./.github/actions/build-panoptes
+      - name: Build holealign-server
+        id: holealign
+        uses: ./.github/actions/build-holealign
 
       - name: Configure Anthropic identity federation
         env:
@@ -200,7 +200,7 @@ jobs:
 
       - name: Evaluate
         env:
-          PANOPTES_SERVER: ${{ steps.panoptes.outputs.bin }}
+          HOLEALIGN_SERVER: ${{ steps.holealign.outputs.bin }}
           ANTHROPIC_OIDC_AUDIENCE: ${{ vars.ANTHROPIC_OIDC_AUDIENCE }}
           OUT: ${{ runner.temp }}/eval
         run: |

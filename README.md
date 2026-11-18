@@ -1,14 +1,14 @@
-# Panoptes rules
+# Holealign rules
 
-[![validate](https://github.com/DonSosiska/panoptes-rules/actions/workflows/validate.yml/badge.svg)](https://github.com/DonSosiska/panoptes-rules/actions/workflows/validate.yml)
-[![release](https://github.com/DonSosiska/panoptes-rules/actions/workflows/release.yml/badge.svg)](https://github.com/DonSosiska/panoptes-rules/actions/workflows/release.yml)
+[![validate](https://github.com/DonSosiska/holealign-rules/actions/workflows/validate.yml/badge.svg)](https://github.com/DonSosiska/holealign-rules/actions/workflows/validate.yml)
+[![release](https://github.com/DonSosiska/holealign-rules/actions/workflows/release.yml/badge.svg)](https://github.com/DonSosiska/holealign-rules/actions/workflows/release.yml)
 [![license: CC0 1.0](https://img.shields.io/badge/license-CC0%201.0-lightgrey.svg)](LICENSE)
 
-The public rules repository for [Panoptes](https://github.com/DonSosiska/panoptes). Everything here is
+The public rules repository for [Holealign](https://github.com/DonSosiska/holealign). Everything here is
 dedicated to the public domain under [CC0 1.0](LICENSE).
 
 A rule says when a vulnerable package is actually exploitable, as a CEL expression over facts that
-Panoptes agents collect from the host. A scanner says "this version is vulnerable"; a rule says "and
+Holealign agents collect from the host. A scanner says "this version is vulnerable"; a rule says "and
 the conditions are met", or "but sshd runs with `LoginGraceTime 0`, so not exploitable". Rules do not
 depend on the host, so they are written and reviewed once, here, and delivered to every server as a
 signed feed.
@@ -16,13 +16,13 @@ signed feed.
 ## Use the feed
 
 Servers poll the feed and install a bundle only after verifying its signature, its contents and its
-tests. In the Panoptes server configuration:
+tests. In the Holealign server configuration:
 
 ```yaml
 rules:
   feed:
     enabled: true
-    url: https://donsosiska.github.io/panoptes-rules/latest.json
+    url: https://donsosiska.github.io/holealign-rules/latest.json
     trusted_keys:
       - "UuFW4nYSCwI3xfHhwapVhYrjYhVO6i7yaxOTv9KFCuM="    # contents of keys/rules-public.key
 ```
@@ -30,8 +30,8 @@ rules:
 The trusted key is the base64 ed25519 public key in [`keys/rules-public.key`](keys/rules-public.key); see
 [keys/README.md](keys/README.md) for how it is managed and rotated. Compare the value above with the file
 before you copy it. Every bundle is also attached to the GitHub release `rules-<seq>` for air-gapped
-servers (`panoptes-server rules import`). What the server checks and how the layers combine is described in
-the Panoptes [rules feed documentation](https://github.com/DonSosiska/panoptes/blob/main/docs/rules-feed.md).
+servers (`holealign-server rules import`). What the server checks and how the layers combine is described in
+the Holealign [rules feed documentation](https://github.com/DonSosiska/holealign/blob/main/docs/rules-feed.md).
 
 ## Repository layout
 
@@ -43,8 +43,8 @@ the Panoptes [rules feed documentation](https://github.com/DonSosiska/panoptes/b
 | `keys/` | The public signing key that servers trust, and key management notes. |
 | `scripts/` | `bot-drafts.sh` (draft rules, open PRs), `next-seq.sh` (bundle sequence number), `publish-pages.sh` (GitHub Pages). |
 | `.github/workflows/` | `validate` (PRs and `main`), `release` (sign and publish), `bot` (draft rules). |
-| `PANOPTES_REF` | The Panoptes commit CI builds `panoptes-server` from. |
-| `Makefile` | `make validate`, `make bundle` (both need `PANOPTES_SERVER=/path/to/panoptes-server`). |
+| `HOLEALIGN_REF` | The Holealign commit CI builds `holealign-server` from. |
+| `Makefile` | `make validate`, `make bundle` (both need `HOLEALIGN_SERVER=/path/to/holealign-server`). |
 | `docs/` | Guides, see below. |
 
 ## Rule lifecycle
@@ -58,8 +58,8 @@ human PR   --/     (validate)      (human)                      (signed)    (lat
 1. **Propose.** Either the bot opens a draft pull request (branch `bot/<vuln>-<source>`, label
    `bot-draft`, `status: draft`), or a person opens a pull request with a rule and its tests
    ([CONTRIBUTING.md](CONTRIBUTING.md)).
-2. **Validate.** The `validate` workflow builds `panoptes-server`, runs `rules build` over every rule and test,
-   and checks that the 8 shared rules are identical to Panoptes. A rule with `status: draft` fails it by
+2. **Validate.** The `validate` workflow builds `holealign-server`, runs `rules build` over every rule and test,
+   and checks that the 8 shared rules are identical to Holealign. A rule with `status: draft` fails it by
    design: red means awaiting review.
 3. **Review.** A code owner checks the rule against the advisory, not only that CI is green
    ([docs/reviewing.md](docs/reviewing.md)). Merging is the review.
@@ -93,8 +93,8 @@ references: [https://...]
 ```
 
 Optional keys: `not_affected_if`, `fact_requests` (restricted `file.match`) and `targets`. The full format, the
-fact catalog and the `file.match` policy are in the Panoptes
-[rules documentation](https://github.com/DonSosiska/panoptes/blob/main/docs/rules.md). A test file is a list of
+fact catalog and the `file.match` policy are in the Holealign
+[rules documentation](https://github.com/DonSosiska/holealign/blob/main/docs/rules.md). A test file is a list of
 cases run by the real engine:
 
 ```yaml
@@ -111,13 +111,13 @@ cases run by the real engine:
 |---|---|
 | `draft` | Written by the bot (`source: llm:<model>`), not reviewed. `validate` and `rules build` reject it. |
 | `reviewed` | A human checked it against the advisory. The only status that can be merged and published. |
-| `rejected` | Exists in the Panoptes server database, so that the drafter does not regenerate a rule. Not used in this repository: a rejected draft is closed, and a rule that must go is deleted. |
+| `rejected` | Exists in the Holealign server database, so that the drafter does not regenerate a rule. Not used in this repository: a rejected draft is closed, and a rule that must go is deleted. |
 
 ### `source` values
 
 | `source` | Meaning |
 |---|---|
-| `builtin` | One of the 8 rules shipped inside Panoptes. These are copies and must stay identical to the ones at `PANOPTES_REF`. |
+| `builtin` | One of the 8 rules shipped inside Holealign. These are copies and must stay identical to the ones at `HOLEALIGN_REF`. |
 | `llm:<model>` | Drafted by the bot, for example `llm:claude-sonnet-5-5`. |
 | `user` | Written by hand. |
 
@@ -127,7 +127,7 @@ cases run by the real engine:
 |---|---|---|
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contributors | Propose a rule by hand, tests, local validation, conventions. |
 | [docs/reviewing.md](docs/reviewing.md) | Reviewers | Checklist for bot draft pull requests, with a worked example. |
-| [docs/maintainers.md](docs/maintainers.md) | Maintainers | Release runbook, Pages and rollback, `PANOPTES_REF`, bot operations, incident response. |
+| [docs/maintainers.md](docs/maintainers.md) | Maintainers | Release runbook, Pages and rollback, `HOLEALIGN_REF`, bot operations, incident response. |
 | [docs/bot-setup.md](docs/bot-setup.md) | Maintainers | One-time setup of the bot's keyless Anthropic access. |
 | [keys/README.md](keys/README.md) | Maintainers, operators | The signing key: setup and rotation. |
 | [SECURITY.md](SECURITY.md) | Everyone | What to report and how. |

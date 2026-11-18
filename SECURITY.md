@@ -15,11 +15,11 @@
 ## How to report
 
 Please do not open a public issue. Report privately through GitHub private vulnerability reporting on this repository:
-[Security tab, "Report a vulnerability"](https://github.com/DonSosiska/panoptes-rules/security/advisories/new).
+[Security tab, "Report a vulnerability"](https://github.com/DonSosiska/holealign-rules/security/advisories/new).
 The maintainers will enable private reporting on this repository; if the link does not work yet, contact the
 [repository owner](https://github.com/DonSosiska) through GitHub without putting details in a public place.
 
-Bugs in the Panoptes product itself (server, agent, rule engine) go to
-https://github.com/DonSosiska/panoptes/security.
+Bugs in the Holealign product itself (server, agent, rule engine) go to
+https://github.com/DonSosiska/holealign/security.
 
 If the signing key leaks, operators must remove it from `rules.feed.trusted_keys`; see [keys/README.md](keys/README.md).

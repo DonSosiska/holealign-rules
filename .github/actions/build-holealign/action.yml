@@ -1,63 +1,63 @@
-name: Build panoptes-server
-description: Check out DonSosiska/panoptes at the commit in PANOPTES_REF and build panoptes-server.
+name: Build holealign-server
+description: Check out DonSosiska/holealign at the commit in HOLEALIGN_REF and build holealign-server.
 outputs:
   bin:
-    description: Absolute path of the built panoptes-server binary
+    description: Absolute path of the built holealign-server binary
     value: ${{ steps.build.outputs.bin }}
-  panoptes_dir:
-    description: Absolute path of the panoptes checkout
+  holealign_dir:
+    description: Absolute path of the holealign checkout
     value: ${{ steps.build.outputs.dir }}
   sha:
-    description: The verified panoptes commit
+    description: The verified holealign commit
     value: ${{ steps.ref.outputs.sha }}
 runs:
   using: composite
   steps:
-    - name: Read PANOPTES_REF
+    - name: Read HOLEALIGN_REF
       id: ref
       shell: bash
       run: |
         set -euo pipefail
-        sha="$(grep -v '^[[:space:]]*#' PANOPTES_REF | grep -v '^[[:space:]]*$' | head -n 1 | tr -d '[:space:]')"
+        sha="$(grep -v '^[[:space:]]*#' HOLEALIGN_REF | grep -v '^[[:space:]]*$' | head -n 1 | tr -d '[:space:]')"
         if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
-          echo "::error::PANOPTES_REF must hold a full 40-character commit SHA"
+          echo "::error::HOLEALIGN_REF must hold a full 40-character commit SHA"
           exit 1
         fi
         echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
-        repository: DonSosiska/panoptes
+        repository: DonSosiska/holealign
         ref: ${{ steps.ref.outputs.sha }}
-        path: panoptes
+        path: holealign
         fetch-depth: 0   # full history, for the ancestry check below
         persist-credentials: false
 
-    # The pinned commit must be part of panoptes main, so a commit from a fork, an
+    # The pinned commit must be part of holealign main, so a commit from a fork, an
     # unmerged branch or a force-pushed-away history cannot become the build tool.
-    - name: Require PANOPTES_REF to be on panoptes main
+    - name: Require HOLEALIGN_REF to be on holealign main
       shell: bash
       env:
         SHA: ${{ steps.ref.outputs.sha }}
       run: |
         set -euo pipefail
-        cd panoptes
+        cd holealign
         git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
         if [[ "$(git rev-parse HEAD)" != "$SHA" ]]; then
-          echo "::error::checked out commit does not match PANOPTES_REF"
+          echo "::error::checked out commit does not match HOLEALIGN_REF"
           exit 1
         fi
         if ! git merge-base --is-ancestor "$SHA" refs/remotes/origin/main; then
-          echo "::error::PANOPTES_REF $SHA is not an ancestor of DonSosiska/panoptes main"
+          echo "::error::HOLEALIGN_REF $SHA is not an ancestor of DonSosiska/holealign main"
           exit 1
         fi
 
     - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
       with:
-        go-version-file: panoptes/go.mod
-        cache-dependency-path: panoptes/go.sum
+        go-version-file: holealign/go.mod
+        cache-dependency-path: holealign/go.sum
 
-    - name: Build panoptes-server
+    - name: Build holealign-server
       id: build
       shell: bash
       env:
@@ -65,6 +65,6 @@ runs:
       run: |
         set -euo pipefail
         mkdir -p "$OUT_DIR"
-        (cd panoptes && CGO_ENABLED=0 go build -trimpath -o "$OUT_DIR/panoptes-server" ./cmd/panoptes-server)
-        echo "bin=$OUT_DIR/panoptes-server" >> "$GITHUB_OUTPUT"
-        echo "dir=$PWD/panoptes" >> "$GITHUB_OUTPUT"
+        (cd holealign && CGO_ENABLED=0 go build -trimpath -o "$OUT_DIR/holealign-server" ./cmd/holealign-server)
+        echo "bin=$OUT_DIR/holealign-server" >> "$GITHUB_OUTPUT"
+        echo "dir=$PWD/holealign" >> "$GITHUB_OUTPUT"

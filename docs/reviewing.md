@@ -64,10 +64,10 @@ Work through it in order. Any "no" means: fix the rule, or close the pull reques
 ### 2. The facts exist, and their exact values
 
 - [ ] Every name in `facts` and in `facts["..."]` is in the
-  [fact catalog](https://github.com/DonSosiska/panoptes/blob/main/docs/rules.md#fact-catalog). The engine rejects unknown
+  [fact catalog](https://github.com/DonSosiska/holealign/blob/main/docs/rules.md#fact-catalog). The engine rejects unknown
   names, but check that the right fact is used for the question.
 - [ ] Every string literal compared with a fact is a value the agent reports. Check the type (string, list,
-  map) and the spelling in the collector source in Panoptes (`internal/agent/facts/`) or with `panoptes-agent
+  map) and the spelling in the collector source in Holealign (`internal/agent/facts/`) or with `holealign-agent
   -print-facts` on a host. Common ones:
 
 | Fact | Type | Values and traps |
@@ -138,10 +138,10 @@ $EDITOR rules/<id>.yaml tests/<id>.yaml
 ```
 
 To run the real check locally, set `status: reviewed` first (a draft never builds), and use a
-`panoptes-server` built at `PANOPTES_REF` ([CONTRIBUTING.md](../CONTRIBUTING.md#validate-locally)):
+`holealign-server` built at `HOLEALIGN_REF` ([CONTRIBUTING.md](../CONTRIBUTING.md#validate-locally)):
 
 ```sh
-make validate PANOPTES_SERVER=/tmp/panoptes-server
+make validate HOLEALIGN_SERVER=/tmp/holealign-server
 git add rules tests
 git commit -m "<vuln>: <what you fixed and why>"
 git push origin HEAD
@@ -182,7 +182,7 @@ needs a rule, write it by hand ([CONTRIBUTING.md](../CONTRIBUTING.md)).
 
 ## Worked example: a wrong fact value that the tests did not catch
 
-Draft pull request [#5](https://github.com/DonSosiska/panoptes-rules/pull/5), `CVE-2026-109618` in the `php8.2`
+Draft pull request [#5](https://github.com/DonSosiska/holealign-rules/pull/5), `CVE-2026-109618` in the `php8.2`
 source package (Debian 12, Critical, CISA KEV). The advisory: remote code execution when PHP handles a web
 request, so only SAPIs that serve requests are exposed, and the CLI alone is not.
 

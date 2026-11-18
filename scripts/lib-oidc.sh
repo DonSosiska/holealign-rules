@@ -7,7 +7,7 @@
 # file each time it refreshes its access token).
 #
 # This is the only place that reads ACTIONS_ID_TOKEN_REQUEST_URL / _TOKEN. Callers run the
-# panoptes-server process with those variables removed from its environment.
+# holealign-server process with those variables removed from its environment.
 refresh_identity_token() {
   if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]]; then
     return 0

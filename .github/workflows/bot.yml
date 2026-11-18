@@ -54,7 +54,7 @@ jobs:
           echo "enabled=true" >> "$GITHUB_OUTPUT"
           echo "max=$max" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.gate.outputs.enabled == 'true'
         with:
           fetch-depth: 0
@@ -73,7 +73,7 @@ jobs:
       # The OSV bulk exports (about 90 MB) are reused within a week; the cache is only a speed-up.
       - name: Restore OSV cache
         if: steps.gate.outputs.enabled == 'true'
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/osv-cache
           key: osv-cache-${{ runner.os }}-${{ steps.week.outputs.week }}

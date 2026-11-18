@@ -3,14 +3,14 @@
 `keys/rules-public.key` holds the base64 ed25519 public key that servers trust (`rules.feed.trusted_keys`).
 The release workflow refuses to publish when it is missing, and verifies every signed bundle against it.
 
-The private half is the base64 seed written by `panoptes-server rules keygen -out <file>`; keep an offline,
+The private half is the base64 seed written by `holealign-server rules keygen -out <file>`; keep an offline,
 backed-up copy, and store the same content in the `RULES_SIGNING_KEY` secret of the `rules-release`
 environment. Anyone who holds it can publish rules to every trusting server.
 
 ## First setup
 
 ```sh
-panoptes-server rules keygen -out rules-signing.key    # prints the public key
+holealign-server rules keygen -out rules-signing.key    # prints the public key
 echo '<printed public key>' > keys/rules-public.key    # commit it
 # put the contents of rules-signing.key in the RULES_SIGNING_KEY environment secret
 ```

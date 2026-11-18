@@ -5,7 +5,7 @@ Runbooks for the people who run releases, the bot and the signing key. Contribut
 
 Contents: [Settings the workflows assume](#settings-the-workflows-assume) -
 [Release runbook](#release-runbook) - [Pages and rollback](#pages-and-rollback) -
-[Signing key rotation](#signing-key-rotation) - [Bumping PANOPTES_REF](#bumping-panoptes_ref) -
+[Signing key rotation](#signing-key-rotation) - [Bumping HOLEALIGN_REF](#bumping-holealign_ref) -
 [Keeping the shared rules identical](#keeping-the-shared-rules-identical) -
 [Bot operations](#bot-operations) - [Incident response](#incident-response)
 
@@ -33,7 +33,7 @@ workflows rely on the first four.
 - `workflow_dispatch`, run on `main`. The job has `if: github.ref == 'refs/heads/main'`, so it does nothing
   on another ref.
 
-A change to `PANOPTES_REF`, a script or a workflow alone does not release. Releases do not run in parallel
+A change to `HOLEALIGN_REF`, a script or a workflow alone does not release. Releases do not run in parallel
 (concurrency group `rules-release`, never cancelled).
 
 ### Approve it
@@ -43,8 +43,8 @@ Before you approve, read the commit: the run builds the tip of `main`, which is 
 and publish to every server.
 
 ```sh
-gh run list --workflow release.yml --repo DonSosiska/panoptes-rules --limit 5
-gh run view <run-id> --repo DonSosiska/panoptes-rules --log          # after it finished
+gh run list --workflow release.yml --repo DonSosiska/holealign-rules --limit 5
+gh run view <run-id> --repo DonSosiska/holealign-rules --log          # after it finished
 ```
 
 ### What the job checks and does
@@ -53,7 +53,7 @@ gh run view <run-id> --repo DonSosiska/panoptes-rules --log          # after it 
 |---|---|
 | Require HEAD to be the tip of main | `git ls-remote origin refs/heads/main` must equal `HEAD`. If another commit landed meanwhile, or you re-run an old run, the job fails: it must not publish an older rule set under a newer `seq`. The newer commit has its own run. |
 | Require the public key | `keys/rules-public.key` must exist and be non-empty. |
-| Build panoptes-server | `PANOPTES_REF` must be a 40-hex SHA that is an ancestor of Panoptes `main` ([why](#bumping-panoptes_ref)). |
+| Build holealign-server | `HOLEALIGN_REF` must be a 40-hex SHA that is an ancestor of Holealign `main` ([why](#bumping-holealign_ref)). |
 | Next sequence number | `scripts/next-seq.sh`: highest `rules-<n>` among tags and GitHub releases, plus one (1 when none). Releases are consulted too, so a deleted tag cannot lead to a reused number. |
 | Build bundle | `rules build -rules rules -tests tests -seq <seq>` with `SOURCE_DATE_EPOCH` set to the commit time, so the archive is deterministic. Any invalid, draft or untested rule, or failing test, stops the job. |
 | Write signing key, sign, remove key | The secret is read in the one step that writes a mode 0600 file; the signer reads the file; the file is removed in an `always()` step. |
@@ -69,7 +69,7 @@ gh run view <run-id> --repo DonSosiska/panoptes-rules --log          # after it 
 | `keys/rules-public.key is missing` | See [keys/README.md](../keys/README.md#first-setup). |
 | `secret RULES_SIGNING_KEY is not set` | The secret is missing from the `rules-release` environment (an environment secret, not a repository secret). |
 | Verify fails | The secret and `keys/rules-public.key` are not a pair. Nothing was published. Fix the secret or the file. |
-| `PANOPTES_REF ... is not an ancestor of ... main` | See [Bumping PANOPTES_REF](#bumping-panoptes_ref). |
+| `HOLEALIGN_REF ... is not an ancestor of ... main` | See [Bumping HOLEALIGN_REF](#bumping-holealign_ref). |
 | Failure after `GitHub release` (Pages step) | The release `rules-<seq>` exists but servers do not see it yet. Re-run the job: it takes the next `seq` (gaps are harmless) and publishes. |
 
 ### A release without a rule change
@@ -78,16 +78,16 @@ Run the workflow by hand on `main` to publish the current tree under a new `seq`
 example):
 
 ```sh
-gh workflow run release.yml --repo DonSosiska/panoptes-rules --ref main
+gh workflow run release.yml --repo DonSosiska/holealign-rules --ref main
 ```
 
 ### Verify what was published
 
 ```sh
 seq=<n>
-curl -fsSLO "https://donsosiska.github.io/panoptes-rules/rules-$seq.tar.gz"
-curl -fsSLO "https://donsosiska.github.io/panoptes-rules/rules-$seq.tar.gz.sig"
-panoptes-server rules verify -pub "$(tr -d '[:space:]' < keys/rules-public.key)" "rules-$seq.tar.gz"
+curl -fsSLO "https://donsosiska.github.io/holealign-rules/rules-$seq.tar.gz"
+curl -fsSLO "https://donsosiska.github.io/holealign-rules/rules-$seq.tar.gz.sig"
+holealign-server rules verify -pub "$(tr -d '[:space:]' < keys/rules-public.key)" "rules-$seq.tar.gz"
 ```
 
 ## Pages and rollback
@@ -99,7 +99,7 @@ panoptes-server rules verify -pub "$(tr -d '[:space:]' < keys/rules-public.key)"
 - regenerates `index.html` (links and SHA-256 of each kept bundle);
 - copies `latest.json` last, so that the pointer never names a missing file.
 
-Servers fetch `https://donsosiska.github.io/panoptes-rules/latest.json`, which points at the newest bundle.
+Servers fetch `https://donsosiska.github.io/holealign-rules/latest.json`, which points at the newest bundle.
 To check the script without pushing: `DRY_RUN=1 bash scripts/publish-pages.sh <dist> <seq>` from a checkout.
 
 ### Roll back with a new, higher seq
@@ -120,7 +120,7 @@ Procedure:
 1. Open a pull request that reverts the commit that introduced the problem (or fixes or deletes the rule).
 2. Get the code owner approval, merge. The merge starts the release, which gets the next `seq`.
 3. Approve the release. Servers install it at their next poll (`rules.feed.interval`, default 6 hours), or
-   operators import it by hand (`panoptes-server rules import`).
+   operators import it by hand (`holealign-server rules import`).
 
 Keep the tags and releases `rules-<n>` of the highest numbers: they are what keeps `seq` increasing.
 
@@ -136,31 +136,31 @@ reject a bundle signed by a key they do not trust:
    The release triggered by a rule change, or one started by hand, signs with the new key.
 5. Operators remove the old key later.
 
-## Bumping PANOPTES_REF
+## Bumping HOLEALIGN_REF
 
-[`PANOPTES_REF`](../PANOPTES_REF) holds a full commit SHA of Panoptes. CI (`validate`, `release`, `bot`) builds
-`panoptes-server` from it. That binary validates, tests and packs every rule, and the release workflow runs it
+[`HOLEALIGN_REF`](../HOLEALIGN_REF) holds a full commit SHA of Holealign. CI (`validate`, `release`, `bot`) builds
+`holealign-server` from it. That binary validates, tests and packs every rule, and the release workflow runs it
 with access to the signing key, so which code it is matters.
 
-Rules enforced by `.github/actions/build-panoptes`:
+Rules enforced by `.github/actions/build-holealign`:
 
 - the value is a 40-hex SHA, not a branch or tag (a moving ref would change the build tool without a review here);
-- the commit is an ancestor of Panoptes `main`, so a commit from a fork, an unmerged branch or a history that
+- the commit is an ancestor of Holealign `main`, so a commit from a fork, an unmerged branch or a history that
   was force-pushed away cannot become the build tool.
 
 Dependabot does not manage it. To bump:
 
 ```sh
-sha="$(git ls-remote https://github.com/DonSosiska/panoptes refs/heads/main | cut -f1)"
-echo "$sha" > PANOPTES_REF
+sha="$(git ls-remote https://github.com/DonSosiska/holealign refs/heads/main | cut -f1)"
+echo "$sha" > HOLEALIGN_REF
 
-git clone https://github.com/DonSosiska/panoptes.git ../panoptes     # skip if you have one
-git -C ../panoptes checkout --detach "$sha"
-cp ../panoptes/rules/*.yaml rules/
-cp ../panoptes/rules-tests/*.yaml tests/
-(cd ../panoptes && CGO_ENABLED=0 go build -trimpath -o /tmp/panoptes-server ./cmd/panoptes-server)
-make validate PANOPTES_SERVER=/tmp/panoptes-server
-git status                                   # only PANOPTES_REF, and the shared rules if they changed
+git clone https://github.com/DonSosiska/holealign.git ../holealign     # skip if you have one
+git -C ../holealign checkout --detach "$sha"
+cp ../holealign/rules/*.yaml rules/
+cp ../holealign/rules-tests/*.yaml tests/
+(cd ../holealign && CGO_ENABLED=0 go build -trimpath -o /tmp/holealign-server ./cmd/holealign-server)
+make validate HOLEALIGN_SERVER=/tmp/holealign-server
+git status                                   # only HOLEALIGN_REF, and the shared rules if they changed
 ```
 
 Open a pull request. `validate` repeats the build with the new binary and the shared-rules comparison. If it
@@ -170,13 +170,13 @@ after the merge.
 
 ## Keeping the shared rules identical
 
-Eight rules exist in both repositories: the files in Panoptes `rules/` and `rules-tests/` and the same names
-in `rules/` and `tests/` here. The `validate` step "Shared rules are identical to panoptes" compares them byte
-for byte at `PANOPTES_REF` and fails when a file differs, is missing here, or when Panoptes has none.
+Eight rules exist in both repositories: the files in Holealign `rules/` and `rules-tests/` and the same names
+in `rules/` and `tests/` here. The `validate` step "Shared rules are identical to holealign" compares them byte
+for byte at `HOLEALIGN_REF` and fails when a file differs, is missing here, or when Holealign has none.
 
-- The direction is always Panoptes to here. A change goes into Panoptes first and onto its `main`; then
-  bump `PANOPTES_REF` (above), which copies the new files.
-- A rule added to Panoptes `rules/` must be copied here too, or `validate` fails after the next bump.
+- The direction is always Holealign to here. A change goes into Holealign first and onto its `main`; then
+  bump `HOLEALIGN_REF` (above), which copies the new files.
+- A rule added to Holealign `rules/` must be copied here too, or `validate` fails after the next bump.
 - Do not fix a shared rule in this repository "temporarily": the next bump overwrites it, and `validate`
   fails until then.
 
@@ -187,11 +187,11 @@ for byte at `PANOPTES_REF` and fails when a file differs, is missing here, or wh
 | Item | Value |
 |---|---|
 | Schedule | Daily at 06:00 UTC (`cron: "0 6 * * *"`). GitHub may delay scheduled runs, and disables schedules of a public repository after 60 days without repository activity. |
-| Manual run | `gh workflow run bot.yml --repo DonSosiska/panoptes-rules --ref main -f max=5` |
+| Manual run | `gh workflow run bot.yml --repo DonSosiska/holealign-rules --ref main -f max=5` |
 | `max` | Maximum drafts (pull requests) per run, 1 to 100, default 20. It also caps the candidate list. |
 | Concurrency | One run at a time (group `bot`, not cancelled). Timeout 60 minutes. |
 | Dry run | `DRY_RUN=1 scripts/bot-drafts.sh candidates.json <max>` lists what would be drafted; it touches neither git, GitHub nor the LLM. |
-| Model | `claude-sonnet-5-5`, set as `PANOPTES_LLM_MODEL` in `bot.yml`. |
+| Model | `claude-sonnet-5-5`, set as `HOLEALIGN_LLM_MODEL` in `bot.yml`. |
 
 A run: find candidates (`rules candidates`, from `coverage/`), draft one rule per candidate
 (`rules draft`), commit it on `bot/<vuln>-<source>`, push, open a draft pull request. It skips a candidate whose
@@ -208,7 +208,7 @@ to the model, and scores each draft against the reviewed tests in `tests/`. It o
 writes nothing to the repository.
 
 ```bash
-gh workflow run bot.yml --repo DonSosiska/panoptes-rules --ref main -f mode=eval \
+gh workflow run bot.yml --repo DonSosiska/holealign-rules --ref main -f mode=eval \
   -f variants=claude-sonnet-5-5@medium,claude-haiku-5-5@medium,claude-haiku-5-5@high -f runs=3
 ```
 
@@ -224,14 +224,14 @@ almost all of it the Sonnet variant). Metrics:
 | Missed exploitable | Reviewed cases that want `exploitable` where the draft says anything else |
 | Est. USD per success | Estimated list-price cost of one successful draft, retries included |
 
-Change the bot's model (`PANOPTES_LLM_MODEL` in `bot.yml`) only on evidence from an evaluation, and never to a
+Change the bot's model (`HOLEALIGN_LLM_MODEL` in `bot.yml`) only on evidence from an evaluation, and never to a
 variant with a higher unsafe count.
 
 ### Disabling
 
 | Goal | How |
 |---|---|
-| Pause | `gh workflow disable bot.yml --repo DonSosiska/panoptes-rules` (`enable` to resume). |
+| Pause | `gh workflow disable bot.yml --repo DonSosiska/holealign-rules` (`enable` to resume). |
 | Make runs do nothing | Delete one of the four required `ANTHROPIC_*` variables; the job logs `bot disabled` and succeeds. |
 | Cut off the LLM | Disable or delete the federation rule or the service account in the Anthropic Console. No key to rotate. |
 
@@ -262,7 +262,7 @@ repo:<OWNER>@<OWNER_ID>/<REPO>@<REPO_ID>:ref:refs/heads/main
 Look up the ids once:
 
 ```sh
-gh api repos/DonSosiska/panoptes-rules --jq '{repo_id: .id, owner_id: .owner.id}'
+gh api repos/DonSosiska/holealign-rules --jq '{repo_id: .id, owner_id: .owner.id}'
 ```
 
 | Claim | Condition | Why |
@@ -270,7 +270,7 @@ gh api repos/DonSosiska/panoptes-rules --jq '{repo_id: .id, owner_id: .owner.id}
 | `repository_owner_id` | the owner id | The account cannot be re-created under the same id after a rename or delete. |
 | `repository_id` | the repository id | The same, for the repository. |
 | `ref` | `refs/heads/main` | Only runs on `main`: PR branches and forks never get credentials. |
-| `job_workflow_ref` | `DonSosiska/panoptes-rules/.github/workflows/bot.yml@refs/heads/main` | Only this workflow file at `main`. |
+| `job_workflow_ref` | `DonSosiska/holealign-rules/.github/workflows/bot.yml@refs/heads/main` | Only this workflow file at `main`. |
 | `workflow` | `bot` | The workflow name. |
 | `event_name` | one of `schedule`, `workflow_dispatch` | No pull request or push can authenticate. |
 | audience | the value of `ANTHROPIC_OIDC_AUDIENCE` | A token minted for another audience is rejected. |
@@ -293,7 +293,7 @@ Contain first, then fix forward, then find the cause. Report security-relevant i
 Anyone who holds it can publish rules to every server that trusts it.
 
 1. **Stop publishing.** Delete the value of the `RULES_SIGNING_KEY` environment secret (the release then fails at
-   "Write signing key") and disable the workflow: `gh workflow disable release.yml --repo DonSosiska/panoptes-rules`.
+   "Write signing key") and disable the workflow: `gh workflow disable release.yml --repo DonSosiska/holealign-rules`.
 2. **Tell operators** to remove the key from `rules.feed.trusted_keys` now. A persisted bundle signed only by it is
    ignored at the next server start, and the feed stays idle until a new key is trusted. Operators who cannot
    wait can set `rules.feed.enabled: false`.
@@ -328,7 +328,7 @@ A rule that says "not exploitable" when it is, or "exploitable" when it is not.
 
 Examples: pull requests with wrong or hostile content, runaway cost, a leaked token suspected.
 
-1. Disable it: `gh workflow disable bot.yml --repo DonSosiska/panoptes-rules`.
+1. Disable it: `gh workflow disable bot.yml --repo DonSosiska/holealign-rules`.
 2. Cancel runs in progress: `gh run cancel <run-id>`.
 3. Close the drafts: `gh pr list --label bot-draft --state open`, then `gh pr close <number>` with a comment. Delete
    the `bot/*` branches only if nothing should be kept. Check that no bot pull request was merged

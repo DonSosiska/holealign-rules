@@ -14,12 +14,12 @@ One pull request per rule, adding or changing both files:
 | `tests/<id>.yaml` | Its test cases. A rule without tests fails `validate`. |
 
 The rule format, the CEL environment, the fact catalog and the `file.match` policy are documented in
-the Panoptes [rules documentation](https://github.com/DonSosiska/panoptes/blob/main/docs/rules.md); the
-test format is in the [rules feed documentation](https://github.com/DonSosiska/panoptes/blob/main/docs/rules-feed.md#rule-tests).
+the Holealign [rules documentation](https://github.com/DonSosiska/holealign/blob/main/docs/rules.md); the
+test format is in the [rules feed documentation](https://github.com/DonSosiska/holealign/blob/main/docs/rules-feed.md#rule-tests).
 The [README](README.md#rule-format) has a short example.
 
 No rule for the vulnerability you care about? You can also open a
-[rule request](https://github.com/DonSosiska/panoptes-rules/issues/new?template=rule_request.md).
+[rule request](https://github.com/DonSosiska/holealign-rules/issues/new?template=rule_request.md).
 
 ## Naming
 
@@ -36,11 +36,11 @@ No rule for the vulnerability you care about? You can also open a
 - Express reachability with facts, never `true`. Version ranges are already handled by the scanner.
 - List in `facts` every fact that must be known to decide. An absent fact means "unknown", never "false".
 - Use the exact values the agent reports. Check them in the fact catalog and, on a host, with
-  `panoptes-agent -print-facts`. For example `php.sapi` holds `cli`, `php-fpm` and `apache2handler`.
+  `holealign-agent -print-facts`. For example `php.sapi` holds `cli`, `php-fpm` and `apache2handler`.
 - Keep the selectors as narrow as the advisory: `packages` must not cover products or versions the advisory does
   not.
 - A `file.match` request must not target a sensitive path (keys, credentials, shadow files, tokens) and must
-  follow the policy in the Panoptes documentation.
+  follow the policy in the Holealign documentation.
 - Set `status: reviewed` only after you have checked the rule against the advisory yourself. The maintainer
   review on the pull request is a second check, not a replacement for yours.
 
@@ -63,30 +63,30 @@ proves nothing; see the example in [docs/reviewing.md](docs/reviewing.md#worked-
 
 ## Validate locally
 
-CI builds `panoptes-server` from the commit in [`PANOPTES_REF`](PANOPTES_REF). Do the same, then run the same
-check as `validate` (needs Git and the Go version named in Panoptes `go.mod`):
+CI builds `holealign-server` from the commit in [`HOLEALIGN_REF`](HOLEALIGN_REF). Do the same, then run the same
+check as `validate` (needs Git and the Go version named in Holealign `go.mod`):
 
 ```sh
 # in a checkout of this repository
-git clone https://github.com/DonSosiska/panoptes.git ../panoptes
-git -C ../panoptes checkout --detach "$(grep -v '^[[:space:]]*#' PANOPTES_REF | head -n 1 | tr -d '[:space:]')"
-(cd ../panoptes && CGO_ENABLED=0 go build -trimpath -o /tmp/panoptes-server ./cmd/panoptes-server)
+git clone https://github.com/DonSosiska/holealign.git ../holealign
+git -C ../holealign checkout --detach "$(grep -v '^[[:space:]]*#' HOLEALIGN_REF | head -n 1 | tr -d '[:space:]')"
+(cd ../holealign && CGO_ENABLED=0 go build -trimpath -o /tmp/holealign-server ./cmd/holealign-server)
 
-make validate PANOPTES_SERVER=/tmp/panoptes-server
+make validate HOLEALIGN_SERVER=/tmp/holealign-server
 ```
 
-`make validate` runs `panoptes-server rules build -rules rules -tests tests -seq 1` into a temporary directory.
+`make validate` runs `holealign-server rules build -rules rules -tests tests -seq 1` into a temporary directory.
 It validates every rule, runs every test with the real engine and applies the coverage policy. It prints
 every problem; fix them all and run it again. Also run `shellcheck scripts/*.sh` if you touch a script.
 
 ## The shared rules
 
 Eight rules (`CVE-2023-44487-apache`, `CVE-2023-44487-nginx`, `CVE-2023-48795`, `CVE-2024-1086`,
-`CVE-2024-21626`, `CVE-2024-3094`, `CVE-2024-4577`, `CVE-2024-6387`) also ship inside Panoptes
+`CVE-2024-21626`, `CVE-2024-3094`, `CVE-2024-4577`, `CVE-2024-6387`) also ship inside Holealign
 (`rules/` and `rules-tests/` in that repository). CI fails if the copies here differ by a single byte from the
-ones at `PANOPTES_REF`. Do not edit them here. Change them in Panoptes first; once the change is on Panoptes
-`main`, bump `PANOPTES_REF` and copy the files here in one pull request (see
-[docs/maintainers.md](docs/maintainers.md#bumping-panoptes_ref)).
+ones at `HOLEALIGN_REF`. Do not edit them here. Change them in Holealign first; once the change is on Holealign
+`main`, bump `HOLEALIGN_REF` and copy the files here in one pull request (see
+[docs/maintainers.md](docs/maintainers.md#bumping-holealign_ref)).
 
 ## Commits and pull requests
 
@@ -95,7 +95,7 @@ ones at `PANOPTES_REF`. Do not edit them here. Change them in Panoptes first; on
   package`, `Add rule CVE-2024-0000-foo`. Explain why in the body when it is not obvious from the advisory.
 - Fill in the pull request template: advisory, packages and the reviewer checklist. Say which fact values you
   verified and where.
-- Do not mix rule changes with workflow, script or `PANOPTES_REF` changes.
+- Do not mix rule changes with workflow, script or `HOLEALIGN_REF` changes.
 - Do not push to `bot/*` branches unless you are reviewing that draft ([docs/reviewing.md](docs/reviewing.md)).
 
 ## Review

@@ -3,9 +3,9 @@
 #
 # usage: scripts/bot-drafts.sh <candidates.json> <max>
 #
-# Environment: PANOPTES_SERVER (path to panoptes-server), BOT_TOKEN (GitHub token with
+# Environment: HOLEALIGN_SERVER (path to holealign-server), BOT_TOKEN (GitHub token with
 # contents and pull-requests write; read once and unset, see "Credentials"), GH_REPO, and the
-# PANOPTES_LLM_* variables read by "rules draft". The LLM is reached through workload
+# HOLEALIGN_LLM_* variables read by "rules draft". The LLM is reached through workload
 # identity federation: ANTHROPIC_FEDERATION_RULE_ID, ANTHROPIC_ORGANIZATION_ID,
 # ANTHROPIC_SERVICE_ACCOUNT_ID, ANTHROPIC_IDENTITY_TOKEN_FILE (and optionally
 # ANTHROPIC_WORKSPACE_ID). In GitHub Actions the token file is refreshed from
@@ -37,7 +37,7 @@ if (( $# != 2 )); then
 fi
 cand="$1"
 max="$2"
-: "${PANOPTES_SERVER:?PANOPTES_SERVER is required}"
+: "${HOLEALIGN_SERVER:?HOLEALIGN_SERVER is required}"
 # Keep the token in a shell variable that is not exported, so child processes do not inherit it.
 gh_token="${BOT_TOKEN:-}"
 unset BOT_TOKEN
@@ -80,7 +80,7 @@ if [[ -z "$gh_token" ]]; then
 fi
 
 # A static key would take precedence over workload identity federation in the SDK.
-for v in ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_PROFILE PANOPTES_LLM_API_KEY; do
+for v in ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_PROFILE HOLEALIGN_LLM_API_KEY; do
   if [[ -n "${!v:-}" ]]; then
     echo "error: $v is set; unset it so that workload identity federation is used" >&2
     exit 2
@@ -151,7 +151,7 @@ for ((i = 0; i < total && created < max; i++)); do
   body="$work/body-$i.md"
   rc=0
   refresh_identity_token
-  without_credentials "$PANOPTES_SERVER" rules draft -candidate-file "$cand" -index "$i" \
+  without_credentials "$HOLEALIGN_SERVER" rules draft -candidate-file "$cand" -index "$i" \
     -rules rules -tests tests -out-rules rules -out-tests tests > "$body" || rc=$?
   case "$rc" in
     0) ;;

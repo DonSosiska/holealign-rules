@@ -3,6 +3,6 @@ updates:
   - package-ecosystem: github-actions
     directories:
       - "/"
-      - "/.github/actions/build-panoptes"
+      - "/.github/actions/build-holealign"
     schedule:
       interval: weekly

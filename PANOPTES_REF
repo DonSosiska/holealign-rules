@@ -3,4 +3,4 @@
 # to bump, pick a commit on panoptes main (git ls-remote https://github.com/DonSosiska/panoptes refs/heads/main),
 # replace the line below, and open a PR. validate.yml then builds and tests with the new binary.
 # It must contain the "rules candidates" and "rules draft" commands for bot.yml.
-d9404d742b5b73e913795b5fecf942fa9b6255d7
+b6af4e3e7cd8d716a473c33e68a41b32ff2f5401

@@ -32,6 +32,18 @@ jobs:
           fetch-depth: 0   # tags, for the sequence number
           persist-credentials: true   # scripts/publish-pages.sh pushes gh-pages
 
+      # An old commit or a re-run of an old run must not republish an older rule set
+      # under a newer sequence number.
+      - name: Require HEAD to be the tip of main
+        run: |
+          set -euo pipefail
+          tip="$(git ls-remote origin refs/heads/main | cut -f1)"
+          head="$(git rev-parse HEAD)"
+          if [[ -z "$tip" || "$tip" != "$head" ]]; then
+            echo "::error::HEAD ($head) is not the current tip of main (${tip:-unknown}); not releasing"
+            exit 1
+          fi
+
       - name: Require the public key
         run: |
           set -euo pipefail
@@ -62,11 +74,10 @@ jobs:
           export SOURCE_DATE_EPOCH
           "$PANOPTES_SERVER" rules build -rules rules -tests tests -seq "$SEQ" -out "$DIST"
 
-      - name: Sign bundle
+      # The secret is referenced only here, and only to write the key file. The signer
+      # reads the file and never sees the secret in its environment.
+      - name: Write signing key
         env:
-          PANOPTES_SERVER: ${{ steps.panoptes.outputs.bin }}
-          SEQ: ${{ steps.seq.outputs.seq }}
-          DIST: ${{ runner.temp }}/dist
           KEY_FILE: ${{ runner.temp }}/rules-signing.key
           RULES_SIGNING_KEY: ${{ secrets.RULES_SIGNING_KEY }}
         run: |
@@ -77,6 +88,15 @@ jobs:
           fi
           umask 077
           printf '%s\n' "$RULES_SIGNING_KEY" > "$KEY_FILE"
+
+      - name: Sign bundle
+        env:
+          PANOPTES_SERVER: ${{ steps.panoptes.outputs.bin }}
+          SEQ: ${{ steps.seq.outputs.seq }}
+          DIST: ${{ runner.temp }}/dist
+          KEY_FILE: ${{ runner.temp }}/rules-signing.key
+        run: |
+          set -euo pipefail
           "$PANOPTES_SERVER" rules sign -key "$KEY_FILE" "$DIST/rules-$SEQ.tar.gz"
 
       - name: Remove signing key

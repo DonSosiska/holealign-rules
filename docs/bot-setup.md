@@ -47,12 +47,18 @@ variables are not set` and succeeds without doing anything.
 
 ## 3. How a run authenticates
 
-- The job has `id-token: write`. A step requests a GitHub OIDC token for the audience and writes it to a
+- The job has `id-token: write`. `scripts/bot-drafts.sh` requests a GitHub OIDC token for the audience and writes it to a
   file under `$RUNNER_TEMP` (umask 077, masked in the log). The file is removed in a final `always()` step.
 - The Anthropic SDK inside `panoptes-server rules draft` reads the token file and exchanges it for
   credentials. It needs no key.
 - GitHub OIDC tokens last only a few minutes. `scripts/bot-drafts.sh` re-fetches the token file before each
   draft when it is older than four minutes.
+- The checkout stores no credentials (`persist-credentials: false`). The workflow token reaches the script as
+  `BOT_TOKEN`, which the script moves into an unexported variable and hands only to `git push` and to each `gh`
+  command. `rules candidates` and `rules draft`, which parse untrusted OSV, KEV and LLM data, run with `GH_TOKEN`,
+  `GITHUB_TOKEN`, `ACTIONS_ID_TOKEN_REQUEST_TOKEN` and `ACTIONS_ID_TOKEN_REQUEST_URL` removed from their environment;
+  only the token-refresh function in the script reads the two `ACTIONS_*` variables.
+- Pull requests are opened as GitHub drafts.
 - The script refuses to run if `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_PROFILE` or
   `PANOPTES_LLM_API_KEY` is set, because those would take precedence over the federation.
 

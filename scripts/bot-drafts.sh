@@ -3,7 +3,8 @@
 #
 # usage: scripts/bot-drafts.sh <candidates.json> <max>
 #
-# Environment: PANOPTES_SERVER (path to panoptes-server), GH_TOKEN, and the
+# Environment: PANOPTES_SERVER (path to panoptes-server), BOT_TOKEN (GitHub token with
+# contents and pull-requests write; read once and unset, see "Credentials"), GH_REPO, and the
 # PANOPTES_LLM_* variables read by "rules draft". The LLM is reached through workload
 # identity federation: ANTHROPIC_FEDERATION_RULE_ID, ANTHROPIC_ORGANIZATION_ID,
 # ANTHROPIC_SERVICE_ACCOUNT_ID, ANTHROPIC_IDENTITY_TOKEN_FILE (and optionally
@@ -11,6 +12,12 @@
 # ACTIONS_ID_TOKEN_REQUEST_URL, with the audience in ANTHROPIC_OIDC_AUDIENCE.
 # No API key may be set. Run from a checkout of this repository whose origin allows
 # pushing, on a clean tree.
+#
+# Credentials: the process that parses untrusted data ("rules draft", which handles OSV and
+# LLM output) never receives GH_TOKEN, GITHUB_TOKEN or the ACTIONS_ID_TOKEN_REQUEST_* variables
+# (run through env -u). The GitHub token is handed only to the git push and to each gh command
+# (the checkout has no stored credentials); the OIDC request variables are read only in
+# refresh_identity_token.
 #
 # DRY_RUN=1 only lists the candidates and whether each would be drafted. It touches
 # neither git, GitHub nor the LLM.
@@ -31,6 +38,9 @@ fi
 cand="$1"
 max="$2"
 : "${PANOPTES_SERVER:?PANOPTES_SERVER is required}"
+# Keep the token in a shell variable that is not exported, so child processes do not inherit it.
+gh_token="${BOT_TOKEN:-}"
+unset BOT_TOKEN
 if [[ ! "$max" =~ ^[0-9]+$ ]]; then
   echo "error: max must be a number: $max" >&2
   exit 2
@@ -62,6 +72,11 @@ if [[ "${DRY_RUN:-0}" == 1 ]]; then
   done
   echo "dry run: nothing drafted"
   exit 0
+fi
+
+if [[ -z "$gh_token" ]]; then
+  echo "error: BOT_TOKEN is required" >&2
+  exit 2
 fi
 
 # A static key would take precedence over workload identity federation in the SDK.
@@ -100,12 +115,27 @@ refresh_identity_token() {
   (umask 077 && printf '%s' "$token" > "$jwt.tmp" && mv -f "$jwt.tmp" "$jwt")
 }
 
+# Run a command without any GitHub credentials in its environment.
+without_credentials() {
+  env -u GH_TOKEN -u GITHUB_TOKEN -u BOT_TOKEN \
+    -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL "$@"
+}
+
+# git push with the token given for this one command (no stored credentials, nothing on argv).
+push_branch() {
+  local auth
+  auth="$(printf 'x-access-token:%s' "$gh_token" | base64 | tr -d '\n')"
+  echo "::add-mask::$auth"
+  GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
+    GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth" git push --quiet origin "$1"
+}
+
 bot_name="github-actions[bot]"
 bot_email="41898282+github-actions[bot]@users.noreply.github.com"
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 
-gh label create bot-draft --color FBCA04 \
+GH_TOKEN="$gh_token" gh label create bot-draft --color FBCA04 \
   --description "Rule drafted by the bot; needs human review" >/dev/null 2>&1 || true
 
 echo "candidates: $total, draft limit: $max"
@@ -128,7 +158,7 @@ for ((i = 0; i < total && created < max; i++)); do
     echo "skip $branch: branch exists"
     continue
   fi
-  existing="$(gh pr list --head "$branch" --state all --json number --jq 'length')"
+  existing="$(GH_TOKEN="$gh_token" gh pr list --head "$branch" --state all --json number --jq 'length')"
   if [[ "$existing" != "0" ]]; then
     echo "skip $branch: a pull request already exists"
     continue
@@ -142,7 +172,7 @@ for ((i = 0; i < total && created < max; i++)); do
   body="$work/body-$i.md"
   rc=0
   refresh_identity_token
-  "$PANOPTES_SERVER" rules draft -candidate-file "$cand" -index "$i" \
+  without_credentials "$PANOPTES_SERVER" rules draft -candidate-file "$cand" -index "$i" \
     -rules rules -tests tests -out-rules rules -out-tests tests > "$body" || rc=$?
   case "$rc" in
     0) ;;
@@ -170,13 +200,16 @@ for ((i = 0; i < total && created < max; i++)); do
     echo
     echo "---"
     echo "This rule was drafted by an LLM and has status draft. Check every condition against the"
-    echo "advisory before approving, set status: reviewed, and make sure validate passes."
+    echo "advisory before approving, and make sure validate passes."
+    echo
+    echo "This pull request is a GitHub draft, and validate fails while the rule has status: draft:"
+    echo "both mean awaiting review. Marking it ready for review and setting status: reviewed is the review."
   } >> "$body"
 
   git -c user.name="$bot_name" -c user.email="$bot_email" \
     commit --quiet -m "Draft rule for $vuln ($src)"
-  git push --quiet origin "$branch"
-  gh pr create --base main --head "$branch" --label bot-draft \
+  push_branch "$branch"
+  GH_TOKEN="$gh_token" gh pr create --draft --base main --head "$branch" --label bot-draft \
     --title "Draft rule: $vuln ($src)" --body-file "$body"
   created=$((created + 1))
 done

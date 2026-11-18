@@ -40,3 +40,34 @@ jobs:
         run: |
           set -euo pipefail
           "$PANOPTES_SERVER" rules build -rules rules -tests tests -seq 1 -out "$OUT_DIR"
+
+      # The 8 rules shipped inside panoptes (rules/ and rules-tests/) must stay identical to
+      # their copies here, otherwise the built-in layer and the feed would disagree.
+      - name: Shared rules are identical to panoptes
+        env:
+          PANOPTES_DIR: ${{ steps.panoptes.outputs.panoptes_dir }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          bad=0
+          check() { # <panoptes dir> <local dir>
+            local n=0 f b
+            for f in "$PANOPTES_DIR/$1"/*.yaml; do
+              b="$(basename "$f")"
+              n=$((n + 1))
+              if [[ ! -f "$2/$b" ]]; then
+                echo "::error::$1/$b exists in panoptes but $2/$b is missing here"
+                bad=1
+              elif ! cmp -s "$f" "$2/$b"; then
+                echo "::error::$2/$b differs from panoptes $1/$b"
+                bad=1
+              fi
+            done
+            if (( n == 0 )); then
+              echo "::error::no files found in panoptes $1"
+              bad=1
+            fi
+          }
+          check rules rules
+          check rules-tests tests
+          exit "$bad"

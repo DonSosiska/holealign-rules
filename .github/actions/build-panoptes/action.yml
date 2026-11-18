@@ -4,6 +4,12 @@ outputs:
   bin:
     description: Absolute path of the built panoptes-server binary
     value: ${{ steps.build.outputs.bin }}
+  panoptes_dir:
+    description: Absolute path of the panoptes checkout
+    value: ${{ steps.build.outputs.dir }}
+  sha:
+    description: The verified panoptes commit
+    value: ${{ steps.ref.outputs.sha }}
 runs:
   using: composite
   steps:
@@ -24,7 +30,27 @@ runs:
         repository: DonSosiska/panoptes
         ref: ${{ steps.ref.outputs.sha }}
         path: panoptes
+        fetch-depth: 0   # full history, for the ancestry check below
         persist-credentials: false
+
+    # The pinned commit must be part of panoptes main, so a commit from a fork, an
+    # unmerged branch or a force-pushed-away history cannot become the build tool.
+    - name: Require PANOPTES_REF to be on panoptes main
+      shell: bash
+      env:
+        SHA: ${{ steps.ref.outputs.sha }}
+      run: |
+        set -euo pipefail
+        cd panoptes
+        git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+        if [[ "$(git rev-parse HEAD)" != "$SHA" ]]; then
+          echo "::error::checked out commit does not match PANOPTES_REF"
+          exit 1
+        fi
+        if ! git merge-base --is-ancestor "$SHA" refs/remotes/origin/main; then
+          echo "::error::PANOPTES_REF $SHA is not an ancestor of DonSosiska/panoptes main"
+          exit 1
+        fi
 
     - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
       with:
@@ -41,3 +67,4 @@ runs:
         mkdir -p "$OUT_DIR"
         (cd panoptes && CGO_ENABLED=0 go build -trimpath -o "$OUT_DIR/panoptes-server" ./cmd/panoptes-server)
         echo "bin=$OUT_DIR/panoptes-server" >> "$GITHUB_OUTPUT"
+        echo "dir=$PWD/panoptes" >> "$GITHUB_OUTPUT"

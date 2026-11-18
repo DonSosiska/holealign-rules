@@ -54,11 +54,11 @@ jobs:
           echo "enabled=true" >> "$GITHUB_OUTPUT"
           echo "max=$max" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.gate.outputs.enabled == 'true'
         with:
           fetch-depth: 0
-          persist-credentials: true   # scripts/bot-drafts.sh pushes bot/* branches
+          persist-credentials: false   # scripts/bot-drafts.sh passes the token to the push only
 
       - name: Build panoptes-server
         if: steps.gate.outputs.enabled == 'true'
@@ -73,7 +73,7 @@ jobs:
       # The OSV bulk exports (about 90 MB) are reused within a week; the cache is only a speed-up.
       - name: Restore OSV cache
         if: steps.gate.outputs.enabled == 'true'
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/osv-cache
           key: osv-cache-${{ runner.os }}-${{ steps.week.outputs.week }}
@@ -89,41 +89,25 @@ jobs:
           set -euo pipefail
           ecosystems="$(grep -v '^[[:space:]]*#' coverage/ecosystems.txt | grep -v '^[[:space:]]*$' | paste -sd, -)"
           mkdir -p "$OSV_CACHE"
-          "$PANOPTES_SERVER" rules candidates -rules rules -packages coverage/packages.txt \
+          # It parses untrusted OSV/KEV data: no GitHub or OIDC credentials in its environment.
+          env -u GH_TOKEN -u GITHUB_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL \
+            "$PANOPTES_SERVER" rules candidates -rules rules -packages coverage/packages.txt \
             -ecosystems "$ecosystems" -since 30d -max "$MAX" -cache "$OSV_CACHE" -out "$CANDIDATES"
 
-      # GitHub OIDC tokens live only a few minutes, so this runs right before drafting.
-      # scripts/bot-drafts.sh re-fetches the token inside its loop when it gets old.
-      # The token goes to a file (never to the environment); the IDs are not secret.
-      - name: Obtain Anthropic identity token
+      # Only identifiers (not secret) and the token file path. scripts/bot-drafts.sh fetches the
+      # short-lived GitHub OIDC token into that file itself, right before each draft.
+      - name: Configure Anthropic identity federation
         if: steps.gate.outputs.enabled == 'true'
         env:
-          OIDC_AUDIENCE: ${{ vars.ANTHROPIC_OIDC_AUDIENCE }}
           FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
           ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
           SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
           WORKSPACE_ID: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
         run: |
           set -euo pipefail
-          umask 077
-          jwt="$RUNNER_TEMP/anthropic-oidc.jwt"
-          url="$ACTIONS_ID_TOKEN_REQUEST_URL"
-          sep='?'
-          if [[ "$url" == *\?* ]]; then sep='&'; fi
-          aud="$(jq -rn --arg a "$OIDC_AUDIENCE" '$a | @uri')"
-          response="$(curl --fail --silent --show-error \
-            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "${url}${sep}audience=${aud}")"
-          token="$(jq -r '.value // empty' <<<"$response")"
-          if [[ -z "$token" ]]; then
-            echo "::error::GitHub did not return an OIDC token"
-            exit 1
-          fi
-          echo "::add-mask::$token"
-          printf '%s' "$token" > "$jwt.tmp"
-          mv -f "$jwt.tmp" "$jwt"
           {
-            echo "ANTHROPIC_IDENTITY_TOKEN_FILE=$jwt"
+            echo "ANTHROPIC_IDENTITY_TOKEN_FILE=$RUNNER_TEMP/anthropic-oidc.jwt"
             echo "ANTHROPIC_FEDERATION_RULE_ID=$FEDERATION_RULE_ID"
             echo "ANTHROPIC_ORGANIZATION_ID=$ORGANIZATION_ID"
             echo "ANTHROPIC_SERVICE_ACCOUNT_ID=$SERVICE_ACCOUNT_ID"
@@ -138,7 +122,7 @@ jobs:
           PANOPTES_SERVER: ${{ steps.panoptes.outputs.bin }}
           MAX: ${{ steps.gate.outputs.max }}
           CANDIDATES: ${{ runner.temp }}/candidates.json
-          GH_TOKEN: ${{ github.token }}
+          BOT_TOKEN: ${{ github.token }}   # the script uses it only for git push and gh, never for the drafter
           GH_REPO: ${{ github.repository }}
           ANTHROPIC_OIDC_AUDIENCE: ${{ vars.ANTHROPIC_OIDC_AUDIENCE }}
         run: bash scripts/bot-drafts.sh "$CANDIDATES" "$MAX"

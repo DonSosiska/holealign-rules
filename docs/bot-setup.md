@@ -9,11 +9,11 @@ delete it if it still exists.
 ## 1. Anthropic Console
 
 1. Create a dedicated service account for the bot, in a workspace that has a monthly spend limit.
-2. Create a GitHub Actions federation rule with these conditions:
-   - repository: `DonSosiska/panoptes-rules`
-   - workflow: `.github/workflows/bot.yml`
-   - ref: `refs/heads/main`
-   - events: `schedule`, `workflow_dispatch`
+2. Create a GitHub Actions federation rule. Match on the immutable identifiers, the workflow and the event,
+   not only on names. The conditions, with the exact values and the pitfall seen in the Console, are in
+   [maintainers.md](maintainers.md#anthropic-federation-the-token-and-the-rule). In short: `repository_owner_id`,
+   `repository_id`, `ref` `refs/heads/main`, `job_workflow_ref` of `.github/workflows/bot.yml` at `main`, workflow
+   `bot`, `event_name` in `schedule` and `workflow_dispatch`, and the audience.
 3. Bind the rule to that service account. Note the federation rule ID, the organization ID, the
    service account ID, the workspace ID (only if the rule spans several workspaces), and the OIDC
    audience the rule expects. The Console shows the audience when the rule is created.
@@ -47,17 +47,28 @@ variables are not set` and succeeds without doing anything.
 
 ## 3. How a run authenticates
 
-- The job has `id-token: write`. A step requests a GitHub OIDC token for the audience and writes it to a
+- The job has `id-token: write`. `scripts/bot-drafts.sh` requests a GitHub OIDC token for the audience and writes it to a
   file under `$RUNNER_TEMP` (umask 077, masked in the log). The file is removed in a final `always()` step.
 - The Anthropic SDK inside `panoptes-server rules draft` reads the token file and exchanges it for
   credentials. It needs no key.
 - GitHub OIDC tokens last only a few minutes. `scripts/bot-drafts.sh` re-fetches the token file before each
   draft when it is older than four minutes.
+- The checkout stores no credentials (`persist-credentials: false`). The workflow token reaches the script as
+  `BOT_TOKEN`, which the script moves into an unexported variable and hands only to `git push` and to each `gh`
+  command. `rules candidates` and `rules draft`, which parse untrusted OSV, KEV and LLM data, run with `GH_TOKEN`,
+  `GITHUB_TOKEN`, `ACTIONS_ID_TOKEN_REQUEST_TOKEN` and `ACTIONS_ID_TOKEN_REQUEST_URL` removed from their environment;
+  only the token-refresh function in the script reads the two `ACTIONS_*` variables.
+- Pull requests are opened as GitHub drafts.
 - The script refuses to run if `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_PROFILE` or
   `PANOPTES_LLM_API_KEY` is set, because those would take precedence over the federation.
 
 ## 4. Checks
 
 - Model: `claude-sonnet-5-5` (`PANOPTES_LLM_MODEL` in `bot.yml`).
+- Start with a small manual run: `gh workflow run bot.yml --repo DonSosiska/panoptes-rules --ref main -f max=1`.
+  A `match_claim_value_mismatch` error means a federation rule condition differs from the token.
 - Revoke the bot's access by deleting or disabling the federation rule or the service account in the
   Console. No key needs rotating, because none exists.
+
+Day-to-day operation (schedule, `max`, disabling, costs, incidents) is in [maintainers.md](maintainers.md#bot-operations);
+reviewing the drafts is in [reviewing.md](reviewing.md).

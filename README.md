@@ -1,68 +1,19 @@
 # Panoptes rules
 
+[![validate](https://github.com/DonSosiska/panoptes-rules/actions/workflows/validate.yml/badge.svg)](https://github.com/DonSosiska/panoptes-rules/actions/workflows/validate.yml)
+[![release](https://github.com/DonSosiska/panoptes-rules/actions/workflows/release.yml/badge.svg)](https://github.com/DonSosiska/panoptes-rules/actions/workflows/release.yml)
+[![license: CC0 1.0](https://img.shields.io/badge/license-CC0%201.0-lightgrey.svg)](LICENSE)
+
 The public rules repository for [Panoptes](https://github.com/DonSosiska/panoptes). Everything here is
 dedicated to the public domain under [CC0 1.0](LICENSE).
 
 A rule says when a vulnerable package is actually exploitable, as a CEL expression over facts that
 Panoptes agents collect from the host. A scanner says "this version is vulnerable"; a rule says "and
-here the conditions are met" or "but sshd runs with LoginGraceTime 0, so not exploitable". Rules do
-not depend on the host, so they are written and reviewed once, here, and delivered to every server as
-a signed feed.
+the conditions are met", or "but sshd runs with `LoginGraceTime 0`, so not exploitable". Rules do not
+depend on the host, so they are written and reviewed once, here, and delivered to every server as a
+signed feed.
 
-```
-rules/<id>.yaml   one rule
-tests/<id>.yaml   its test cases (required)
-coverage/         what the bot looks at (packages.txt, ecosystems.txt)
-keys/             the public key servers trust
-```
-
-## Format
-
-Full documentation: [rules](https://github.com/DonSosiska/panoptes/blob/main/docs/rules.md) and
-[rules feed](https://github.com/DonSosiska/panoptes/blob/main/docs/rules-feed.md) in the Panoptes
-repository. In short, a rule is strict YAML (unknown keys are errors):
-
-```yaml
-id: CVE-2024-6387
-vulns: [CVE-2024-6387]                  # CVE/GHSA ids covered
-title: "OpenSSH regreSSHion: unauthenticated RCE in sshd"
-packages:
-  - {name: openssh*, type: deb}         # name is a glob
-facts: [os.libc, sshd.config]           # every fact read; absent fact -> "conditions unknown"
-exploitable_if: >                       # CEL, must return bool
-  pkg.name.startsWith("openssh-server") &&
-  facts["os.libc"] == "glibc" &&
-  facts["sshd.config"][?"logingracetime"].orValue("120") != "0"
-explanation: "Needs glibc and a non-zero LoginGraceTime."
-fix: {upgrade: "...", mitigation: "..."}
-status: reviewed                        # draft | reviewed | rejected; only reviewed rules ship
-source: user
-references: [https://...]
-```
-
-Package selectors are `{name, type}` (name is a glob on the binary package) or `{source, type}` (the
-source package, exact name). A source selector covers every binary package built from that source:
-`packages: [{source: openssl, type: deb}]` matches `openssl` and `libssl3` alike. Inside the expression
-`pkg["name"]` and `pkg["source"]` tell the binaries apart.
-
-Version ranges are already handled by the scanner, so rules express reachability with facts, never
-with `true`. Facts must exist in the Panoptes fact catalog and be collected by the agent. Requests for
-files (`file.match`) are restricted and must not target sensitive paths.
-
-A test file is a list of cases run by the real engine:
-
-```yaml
-- name: glibc, default LoginGraceTime
-  finding: {vuln: CVE-2024-6387, package: openssh-server, type: deb, severity: High, kev: false}
-  facts: {os.libc: glibc, sshd.config: {logingracetime: "120"}}
-  host: {os_id: debian, arch: amd64}
-  want: exploitable    # exploitable | affected_not_exploitable | conditions_unknown | not_affected
-```
-
-Every rule needs at least one `exploitable` case and one non-exploitable case (the only exemption is
-`exploitable_if: 'false'`).
-
-## Using the feed
+## Use the feed
 
 Servers poll the feed and install a bundle only after verifying its signature, its contents and its
 tests. In the Panoptes server configuration:
@@ -76,50 +27,113 @@ rules:
       - "UuFW4nYSCwI3xfHhwapVhYrjYhVO6i7yaxOTv9KFCuM="    # contents of keys/rules-public.key
 ```
 
-`UuFW4nYSCwI3xfHhwapVhYrjYhVO6i7yaxOTv9KFCuM=` is the base64 key in [`keys/rules-public.key`](keys/) (see [keys/README.md](keys/README.md)).
-Bundles are also attached to the GitHub releases `rules-<seq>` for air-gapped servers
-(`panoptes-server rules import`).
+The trusted key is the base64 ed25519 public key in [`keys/rules-public.key`](keys/rules-public.key); see
+[keys/README.md](keys/README.md) for how it is managed and rotated. Compare the value above with the file
+before you copy it. Every bundle is also attached to the GitHub release `rules-<seq>` for air-gapped
+servers (`panoptes-server rules import`). What the server checks and how the layers combine is described in
+the Panoptes [rules feed documentation](https://github.com/DonSosiska/panoptes/blob/main/docs/rules-feed.md).
 
-## Contributing
+## Repository layout
 
-Open a pull request with the rule and its tests; see [CONTRIBUTING.md](CONTRIBUTING.md). Check locally with:
+| Path | Contents |
+|---|---|
+| `rules/<id>.yaml` | One rule per file. |
+| `tests/<id>.yaml` | Test cases for that rule. Required. |
+| `coverage/packages.txt`, `coverage/ecosystems.txt` | What the bot looks at: source packages and OSV ecosystems. |
+| `keys/` | The public signing key that servers trust, and key management notes. |
+| `scripts/` | `bot-drafts.sh` (draft rules, open PRs), `next-seq.sh` (bundle sequence number), `publish-pages.sh` (GitHub Pages). |
+| `.github/workflows/` | `validate` (PRs and `main`), `release` (sign and publish), `bot` (draft rules). |
+| `PANOPTES_REF` | The Panoptes commit CI builds `panoptes-server` from. |
+| `Makefile` | `make validate`, `make bundle` (both need `PANOPTES_SERVER=/path/to/panoptes-server`). |
+| `docs/` | Guides, see below. |
 
-```sh
-make validate PANOPTES_SERVER=/path/to/panoptes-server
+## Rule lifecycle
+
+```
+bot draft  --\
+              >-- pull request --> review --> merge to main --> release --> GitHub Pages --> servers
+human PR   --/     (validate)      (human)                      (signed)    (latest.json)
 ```
 
-Review policy: every pull request, including those from the bot, needs a human approval, and merging
-is the review. A merge to `main` that touches `rules/` or `tests/` is published to every server that
-trusts the feed key, so reviewers check the rule against the advisory, not just that CI is green.
+1. **Propose.** Either the bot opens a draft pull request (branch `bot/<vuln>-<source>`, label
+   `bot-draft`, `status: draft`), or a person opens a pull request with a rule and its tests
+   ([CONTRIBUTING.md](CONTRIBUTING.md)).
+2. **Validate.** The `validate` workflow builds `panoptes-server`, runs `rules build` over every rule and test,
+   and checks that the 8 shared rules are identical to Panoptes. A rule with `status: draft` fails it by
+   design: red means awaiting review.
+3. **Review.** A code owner checks the rule against the advisory, not only that CI is green
+   ([docs/reviewing.md](docs/reviewing.md)). Merging is the review.
+4. **Release.** A merge to `main` that touches `rules/` or `tests/` starts the `release` workflow. It builds a
+   deterministic bundle, signs it in the protected `rules-release` environment, verifies the signature against
+   `keys/rules-public.key`, creates the GitHub release `rules-<seq>` and updates the `gh-pages` branch
+   ([docs/maintainers.md](docs/maintainers.md)).
+5. **Deliver.** GitHub Pages serves `latest.json` and the newest five bundles. Servers pick up a new `seq`
+   at their next poll.
 
-### Bot drafts
+## Rule format
 
-A daily workflow picks recent advisories for the source packages in `coverage/packages.txt` on the
-ecosystems in `coverage/ecosystems.txt` (by default Debian 12 and Alpine 3.20; Ubuntu is left out because
-its OSV bulk export is about 820 MB and querying it package by package is slow). It asks an LLM to draft
-a rule and tests for each candidate, and opens a pull request labelled `bot-draft`, branch
-`bot/<vuln>-<source>`.
+A rule is strict YAML (unknown keys are errors):
 
-Drafts are LLM-generated and can be wrong. They are written with `status: draft`, so CI fails on them
-until a reviewer has checked every condition against the advisory and set `status: reviewed`. That
-commit is what triggers CI on the pull request. Bot pull requests are created with the workflow token,
-so CI does not start on them by itself; push a commit or close and reopen to trigger it the first time.
-Source-package selectors (`{source: <package>, type: deb}`) are common in bot drafts: one rule covers all
-binary packages of that source.
+```yaml
+id: CVE-2024-6387
+vulns: [CVE-2024-6387]                  # CVE/GHSA ids covered
+title: "OpenSSH regreSSHion: unauthenticated RCE in sshd"
+packages:
+  - {name: openssh*, type: deb}         # name is a glob on the binary package
+facts: [os.libc, sshd.config]           # facts that must be known; absent fact -> "conditions unknown"
+exploitable_if: >                       # CEL, must return bool
+  pkg.name.startsWith("openssh-server") &&
+  facts["os.libc"] == "glibc" &&
+  facts["sshd.config"][?"logingracetime"].orValue("120") != "0"
+explanation: "Needs glibc and a non-zero LoginGraceTime."
+fix: {upgrade: "...", mitigation: "..."}
+status: reviewed
+source: user
+references: [https://...]
+```
 
-The bot calls Anthropic through workload identity federation; no API key is stored. Maintainer setup:
-[docs/bot-setup.md](docs/bot-setup.md).
+Optional keys: `not_affected_if`, `fact_requests` (restricted `file.match`) and `targets`. The full format, the
+fact catalog and the `file.match` policy are in the Panoptes
+[rules documentation](https://github.com/DonSosiska/panoptes/blob/main/docs/rules.md). A test file is a list of
+cases run by the real engine:
 
-## Releases
+```yaml
+- name: glibc, default LoginGraceTime
+  finding: {vuln: CVE-2024-6387, package: openssh-server, type: deb, severity: High, kev: false}
+  facts: {os.libc: glibc, sshd.config: {logingracetime: "120"}}
+  host: {os_id: debian, arch: amd64}
+  want: exploitable    # exploitable | affected_not_exploitable | conditions_unknown | not_affected
+```
 
-On every merge that changes rules or tests, the release workflow builds a deterministic bundle,
-signs it with the offline-generated key stored as a secret, verifies it against
-`keys/rules-public.key`, creates a GitHub release and updates the `gh-pages` branch (latest.json and
-the last five bundles).
+### Status values
 
-## CI and the panoptes version
+| `status` | Meaning here |
+|---|---|
+| `draft` | Written by the bot (`source: llm:<model>`), not reviewed. `validate` and `rules build` reject it. |
+| `reviewed` | A human checked it against the advisory. The only status that can be merged and published. |
+| `rejected` | Exists in the Panoptes server database, so that the drafter does not regenerate a rule. Not used in this repository: a rejected draft is closed, and a rule that must go is deleted. |
 
-CI builds `panoptes-server` from the public Panoptes repository at the commit in
-[`PANOPTES_REF`](PANOPTES_REF). Dependabot does not manage it. To bump: pick a commit on Panoptes `main`
-(`git ls-remote https://github.com/DonSosiska/panoptes refs/heads/main`), replace the SHA in
-`PANOPTES_REF`, and open a pull request; `validate` runs with the new binary.
+### `source` values
+
+| `source` | Meaning |
+|---|---|
+| `builtin` | One of the 8 rules shipped inside Panoptes. These are copies and must stay identical to the ones at `PANOPTES_REF`. |
+| `llm:<model>` | Drafted by the bot, for example `llm:claude-sonnet-5-5`. |
+| `user` | Written by hand. |
+
+## Documentation
+
+| Document | For | Contents |
+|---|---|---|
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Contributors | Propose a rule by hand, tests, local validation, conventions. |
+| [docs/reviewing.md](docs/reviewing.md) | Reviewers | Checklist for bot draft pull requests, with a worked example. |
+| [docs/maintainers.md](docs/maintainers.md) | Maintainers | Release runbook, Pages and rollback, `PANOPTES_REF`, bot operations, incident response. |
+| [docs/bot-setup.md](docs/bot-setup.md) | Maintainers | One-time setup of the bot's keyless Anthropic access. |
+| [keys/README.md](keys/README.md) | Maintainers, operators | The signing key: setup and rotation. |
+| [SECURITY.md](SECURITY.md) | Everyone | What to report and how. |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Everyone | Contributor Covenant 2.1. |
+
+## License
+
+[CC0 1.0 Universal](LICENSE): public domain. Contributions are dedicated to the public domain on the same
+terms ([CONTRIBUTING.md](CONTRIBUTING.md#license-of-contributions)).

@@ -5,9 +5,22 @@ on:
     - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
+      mode:
+        description: "draft: open pull requests with new drafts; eval: measure draft quality and cost per model (no pull requests)"
+        type: choice
+        options: [draft, eval]
+        default: draft
       max:
-        description: Maximum number of drafts (pull requests) this run
+        description: "draft: maximum number of drafts (pull requests) this run"
         default: "20"
+        required: false
+      variants:
+        description: "eval: comma-separated model[@effort] list"
+        default: "claude-sonnet-5-5@medium,claude-haiku-5-5@medium,claude-haiku-5-5@high"
+        required: false
+      runs:
+        description: "eval: drafts per reference rule and variant (1-10)"
+        default: "3"
         required: false
 
 permissions:
@@ -21,6 +34,7 @@ concurrency:
 # credentials through workload identity federation; see docs/bot-setup.md.
 jobs:
   draft:
+    if: github.event_name == 'schedule' || inputs.mode != 'eval'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -126,6 +140,82 @@ jobs:
           GH_REPO: ${{ github.repository }}
           ANTHROPIC_OIDC_AUDIENCE: ${{ vars.ANTHROPIC_OIDC_AUDIENCE }}
         run: bash scripts/bot-drafts.sh "$CANDIDATES" "$MAX"
+
+      - name: Remove Anthropic identity token
+        if: always()
+        run: rm -f -- "$RUNNER_TEMP/anthropic-oidc.jwt" "$RUNNER_TEMP/anthropic-oidc.jwt.tmp"
+
+  # Manual only. Re-drafts every reviewed rule (hidden from the model) with each variant and
+  # scores the drafts against the reviewed tests. Spends real money; opens no pull requests.
+  eval:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'eval'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      id-token: write        # GitHub OIDC token for Anthropic workload identity federation
+    env:
+      PANOPTES_LLM_PROVIDER: anthropic
+      VARIANTS: ${{ inputs.variants }}
+      RUNS: ${{ inputs.runs }}
+    steps:
+      - name: Check configuration
+        env:
+          FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          OIDC_AUDIENCE: ${{ vars.ANTHROPIC_OIDC_AUDIENCE }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$FEDERATION_RULE_ID" || -z "$ORGANIZATION_ID" || -z "$SERVICE_ACCOUNT_ID" || -z "$OIDC_AUDIENCE" ]]; then
+            echo "::error::workload identity variables are not set"
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build panoptes-server
+        id: panoptes
+        uses: ./.github/actions/build-panoptes
+
+      - name: Configure Anthropic identity federation
+        env:
+          FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          WORKSPACE_ID: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+        run: |
+          set -euo pipefail
+          {
+            echo "ANTHROPIC_IDENTITY_TOKEN_FILE=$RUNNER_TEMP/anthropic-oidc.jwt"
+            echo "ANTHROPIC_FEDERATION_RULE_ID=$FEDERATION_RULE_ID"
+            echo "ANTHROPIC_ORGANIZATION_ID=$ORGANIZATION_ID"
+            echo "ANTHROPIC_SERVICE_ACCOUNT_ID=$SERVICE_ACCOUNT_ID"
+            if [[ -n "$WORKSPACE_ID" ]]; then
+              echo "ANTHROPIC_WORKSPACE_ID=$WORKSPACE_ID"
+            fi
+          } >> "$GITHUB_ENV"
+
+      - name: Evaluate
+        env:
+          PANOPTES_SERVER: ${{ steps.panoptes.outputs.bin }}
+          ANTHROPIC_OIDC_AUDIENCE: ${{ vars.ANTHROPIC_OIDC_AUDIENCE }}
+          OUT: ${{ runner.temp }}/eval
+        run: |
+          set -euo pipefail
+          bash scripts/bot-eval.sh "$VARIANTS" "$RUNS" "$OUT"
+          cat "$OUT/summary.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: eval-report
+          path: ${{ runner.temp }}/eval/
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Remove Anthropic identity token
         if: always()

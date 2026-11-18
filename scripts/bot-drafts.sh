@@ -91,29 +91,8 @@ done
 # than four minutes. Only GitHub Actions sets ACTIONS_ID_TOKEN_REQUEST_URL, so elsewhere
 # the token file is used as it is. Any failure here stops the run: "rules draft" would
 # fail for every candidate without a valid token.
-refresh_identity_token() {
-  if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]]; then
-    return 0
-  fi
-  local jwt="${ANTHROPIC_IDENTITY_TOKEN_FILE:?ANTHROPIC_IDENTITY_TOKEN_FILE is required}"
-  if [[ -f "$jwt" && -z "$(find "$jwt" -mmin +4 -print -quit)" ]]; then
-    return 0
-  fi
-  : "${ANTHROPIC_OIDC_AUDIENCE:?ANTHROPIC_OIDC_AUDIENCE is required}"
-  local url="$ACTIONS_ID_TOKEN_REQUEST_URL" sep='?' aud response token
-  if [[ "$url" == *\?* ]]; then sep='&'; fi
-  aud="$(jq -rn --arg a "$ANTHROPIC_OIDC_AUDIENCE" '$a | @uri')"
-  response="$(curl --fail --silent --show-error \
-    -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:?}" \
-    "${url}${sep}audience=${aud}")"
-  token="$(jq -r '.value // empty' <<<"$response")"
-  if [[ -z "$token" ]]; then
-    echo "::error::GitHub did not return an OIDC token" >&2
-    exit 1
-  fi
-  echo "::add-mask::$token"
-  (umask 077 && printf '%s' "$token" > "$jwt.tmp" && mv -f "$jwt.tmp" "$jwt")
-}
+# shellcheck source=scripts/lib-oidc.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib-oidc.sh"
 
 # Run a command without any GitHub credentials in its environment.
 without_credentials() {

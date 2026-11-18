@@ -198,6 +198,35 @@ A run: find candidates (`rules candidates`, from `coverage/`), draft one rule pe
 branch or pull request (in any state) already exists, or whose rule already exists. Exit code 1 means at least
 one draft failed with an error; the others are still processed.
 
+Each draft prints a `usage:` line in the job log (calls, input, output, cache read and cache write tokens,
+estimated USD at list prices). The system prompt is cached between drafts of one run.
+
+### Evaluating models (cost vs quality)
+
+`mode=eval` re-drafts every reviewed rule in `rules/` with each model variant, without showing that rule
+to the model, and scores each draft against the reviewed tests in `tests/`. It opens no pull requests and
+writes nothing to the repository.
+
+```bash
+gh workflow run bot.yml --repo DonSosiska/panoptes-rules --ref main -f mode=eval \
+  -f variants=claude-sonnet-5-5@medium,claude-haiku-5-5@medium,claude-haiku-5-5@high -f runs=3
+```
+
+The summary appears on the run page; the full `report.json` is the `eval-report` artifact. It spends real
+money: about 8 rules × variants × runs drafts (the default above is 72 drafts, roughly $2-3 at list prices,
+almost all of it the Sonnet variant). Metrics:
+
+| Metric | Meaning |
+|---|---|
+| Success rate | Drafts that passed validation and their own tests within the attempt limit |
+| Agreement | Share of the reviewed test cases (for the drafted package type) where the draft gives the reviewed verdict |
+| Unsafe | Reviewed cases that want `exploitable` or `conditions_unknown` where the draft says not exploitable: the dangerous direction |
+| Missed exploitable | Reviewed cases that want `exploitable` where the draft says anything else |
+| Est. USD per success | Estimated list-price cost of one successful draft, retries included |
+
+Change the bot's model (`PANOPTES_LLM_MODEL` in `bot.yml`) only on evidence from an evaluation, and never to a
+variant with a higher unsafe count.
+
 ### Disabling
 
 | Goal | How |

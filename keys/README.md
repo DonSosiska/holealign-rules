@@ -17,12 +17,22 @@ echo '<printed public key>' > keys/rules-public.key    # commit it
 
 ## Rotation
 
-1. Generate the new key. Commit its public key as `keys/rules-public.key` only when the secret is switched (step 4);
-   publish it to server operators now.
+Servers reject a bundle signed by a key they do not trust, so operators must trust the new key before the first
+bundle signed with it appears.
+
+1. Generate the new key offline, with a backup. Do not change the secret or `keys/rules-public.key` yet; give the
+   new public key to server operators.
 2. Operators list both public keys in `rules.feed.trusted_keys` and roll that out.
 3. Wait until the servers run with both keys.
-4. Replace the `RULES_SIGNING_KEY` secret with the new private key and commit the new `keys/rules-public.key`;
-   the next release is signed with it.
+4. Replace the `RULES_SIGNING_KEY` secret with the new private key and commit the new `keys/rules-public.key` in a
+   pull request. Merge it; the next release (a rule change, or `gh workflow run release.yml --ref main`) is signed
+   with the new key and verified against the new public file.
 5. Later, operators remove the old key from `trusted_keys`.
 
-If the key leaks, tell operators to drop it from `trusted_keys` immediately and rotate as above.
+## If the key leaks
+
+Stop releases, tell operators to remove the key from `trusted_keys` immediately, then rotate with a new key. The
+step-by-step procedure is in [docs/maintainers.md](../docs/maintainers.md#the-signing-key-leaked); report it as
+described in [SECURITY.md](../SECURITY.md).
+
+See also the release runbook in [docs/maintainers.md](../docs/maintainers.md#release-runbook).

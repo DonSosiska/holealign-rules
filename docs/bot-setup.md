@@ -9,11 +9,11 @@ delete it if it still exists.
 ## 1. Anthropic Console
 
 1. Create a dedicated service account for the bot, in a workspace that has a monthly spend limit.
-2. Create a GitHub Actions federation rule with these conditions:
-   - repository: `DonSosiska/panoptes-rules`
-   - workflow: `.github/workflows/bot.yml`
-   - ref: `refs/heads/main`
-   - events: `schedule`, `workflow_dispatch`
+2. Create a GitHub Actions federation rule. Match on the immutable identifiers, the workflow and the event,
+   not only on names. The conditions, with the exact values and the pitfall seen in the Console, are in
+   [maintainers.md](maintainers.md#anthropic-federation-the-token-and-the-rule). In short: `repository_owner_id`,
+   `repository_id`, `ref` `refs/heads/main`, `job_workflow_ref` of `.github/workflows/bot.yml` at `main`, workflow
+   `bot`, `event_name` in `schedule` and `workflow_dispatch`, and the audience.
 3. Bind the rule to that service account. Note the federation rule ID, the organization ID, the
    service account ID, the workspace ID (only if the rule spans several workspaces), and the OIDC
    audience the rule expects. The Console shows the audience when the rule is created.
@@ -65,5 +65,10 @@ variables are not set` and succeeds without doing anything.
 ## 4. Checks
 
 - Model: `claude-sonnet-5-5` (`PANOPTES_LLM_MODEL` in `bot.yml`).
+- Start with a small manual run: `gh workflow run bot.yml --repo DonSosiska/panoptes-rules --ref main -f max=1`.
+  A `match_claim_value_mismatch` error means a federation rule condition differs from the token.
 - Revoke the bot's access by deleting or disabling the federation rule or the service account in the
   Console. No key needs rotating, because none exists.
+
+Day-to-day operation (schedule, `max`, disabling, costs, incidents) is in [maintainers.md](maintainers.md#bot-operations);
+reviewing the drafts is in [reviewing.md](reviewing.md).

@@ -103,11 +103,15 @@ jobs:
           set -euo pipefail
           ecosystems="$(grep -v '^[[:space:]]*#' coverage/ecosystems.txt | grep -v '^[[:space:]]*$' | paste -sd, -)"
           mkdir -p "$OSV_CACHE"
+          # Five times the draft limit: candidates that already have a branch or pull request are
+          # skipped by bot-drafts.sh, and without headroom a run where the top MAX all have one
+          # opens nothing.
+          ncand=$((MAX * 5))
           # It parses untrusted OSV/KEV data: no GitHub or OIDC credentials in its environment.
           env -u GH_TOKEN -u GITHUB_TOKEN \
             -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL \
             "$HOLEALIGN_SERVER" rules candidates -rules rules -packages coverage/packages.txt \
-            -ecosystems "$ecosystems" -since 30d -max "$MAX" -cache "$OSV_CACHE" -out "$CANDIDATES"
+            -ecosystems "$ecosystems" -since 30d -max "$ncand" -cache "$OSV_CACHE" -out "$CANDIDATES"
 
       # Only identifiers (not secret) and the token file path. scripts/bot-drafts.sh fetches the
       # short-lived GitHub OIDC token into that file itself, right before each draft.

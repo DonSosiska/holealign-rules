@@ -188,7 +188,7 @@ for byte at `HOLEALIGN_REF` and fails when a file differs, is missing here, or w
 |---|---|
 | Schedule | Daily at 06:00 UTC (`cron: "0 6 * * *"`). GitHub may delay scheduled runs, and disables schedules of a public repository after 60 days without repository activity. |
 | Manual run | `gh workflow run bot.yml --repo DonSosiska/holealign-rules --ref main -f max=5` |
-| `max` | Maximum drafts (pull requests) per run, 1 to 100, default 20. It also caps the candidate list. |
+| `max` | Maximum drafts (pull requests) per run, 1 to 100, default 20. The candidate list is five times as long, so candidates that already have a branch or pull request (open or closed) do not use up the run. |
 | Concurrency | One run at a time (group `bot`, not cancelled). Timeout 60 minutes. |
 | Dry run | `DRY_RUN=1 scripts/bot-drafts.sh candidates.json <max>` lists what would be drafted; it touches neither git, GitHub nor the LLM. |
 | Model | `claude-sonnet-5-5`, set as `HOLEALIGN_LLM_MODEL` in `bot.yml`. |

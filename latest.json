@@ -1,10 +1,16 @@
 {
-  "seq": 5,
-  "url": "rules-5.tar.gz",
-  "sha256": "f8e54432444d84f770c558958a41bed6fb91c801112972355e4a34f99901b738",
+  "seq": 6,
+  "url": "rules-6.tar.gz",
+  "sha256": "5268b2e19b13e087b844ec3e063d3e2c8f163e89026f1986ed94f3cc7089fbed",
   "sig": {
     "alg": "ed25519",
     "key_id": "75eef42e119d4dda",
-    "sig": "e5Ajvwo9Z6ECKTEnc9GkDUj7IEEknYTT28la1NyPswlbQIUidUJizTLMQmlP6tAKH5PO93VNN7ouH1TC6+6BAQ=="
+    "sig": "Iq8Er2vXxuhzZ6qbR08NRiT7LwRJBYUg0tfEqv7Fn+pYB0BKPVh1u1fYR1Jwc8BxjbKnWAk4grDJgevaO4AqAg=="
+  },
+  "signed_at": "2026-11-19T10:13:06Z",
+  "pointer_sig": {
+    "alg": "ed25519",
+    "key_id": "75eef42e119d4dda",
+    "sig": "c9En/btsGrp+zjHiz6DGul3eH5wTXQFiq5OobG5S0JI2x167RPiBcGbNSj3TUPwcs88FMTcT173HRmVFdtYPBQ=="
   }
 }

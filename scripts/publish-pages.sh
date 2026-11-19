@@ -39,6 +39,26 @@ done
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+gh_auth=""
+if [[ -n "${GH_TOKEN:-}" ]]; then
+  gh_auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\r\n')"
+  if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+    echo "::add-mask::$gh_auth"
+  fi
+  unset GH_TOKEN
+fi
+
+git_remote() {
+  if [[ -n "$gh_auth" ]]; then
+    GIT_CONFIG_COUNT=1 \
+      GIT_CONFIG_KEY_0="http.https://github.com/.extraheader" \
+      GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $gh_auth" \
+      git "$@"
+  else
+    git "$@"
+  fi
+}
+
 tmp="$(mktemp -d)"
 wt="$tmp/pages"
 cleanup() {
@@ -47,8 +67,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
-  git fetch --no-tags --depth=1 origin gh-pages
+if git_remote ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+  git_remote fetch --no-tags --depth=1 origin gh-pages
   git worktree add --detach "$wt" FETCH_HEAD
 else
   git worktree add --detach "$wt"
@@ -120,5 +140,5 @@ if [[ "${DRY_RUN:-}" == "1" ]]; then
   git log --stat -1 --format=%s
   exit 0
 fi
-git push origin HEAD:refs/heads/gh-pages
+git_remote push origin HEAD:refs/heads/gh-pages
 echo "published rules-$seq; bundles on pages: ${kept[*]}"

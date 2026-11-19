@@ -6,6 +6,9 @@ on:
     paths:
       - "rules/**"
       - "tests/**"
+  schedule:
+    # Refresh the 720h (30-day) signed latest.json twice a month so it never expires.
+    - cron: "17 6 1,15 * *"
   workflow_dispatch:
 
 permissions:
@@ -30,7 +33,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0   # tags, for the sequence number
-          persist-credentials: true   # scripts/publish-pages.sh pushes gh-pages
+          persist-credentials: false
 
       # An old commit or a re-run of an old run must not republish an older rule set
       # under a newer sequence number.
@@ -131,6 +134,7 @@ jobs:
 
       - name: Publish to GitHub Pages
         env:
+          GH_TOKEN: ${{ github.token }}
           SEQ: ${{ steps.seq.outputs.seq }}
           DIST: ${{ runner.temp }}/dist
         run: bash scripts/publish-pages.sh "$DIST" "$SEQ"

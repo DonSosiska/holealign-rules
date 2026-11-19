@@ -1,16 +1,17 @@
 {
-  "seq": 6,
-  "url": "rules-6.tar.gz",
-  "sha256": "5268b2e19b13e087b844ec3e063d3e2c8f163e89026f1986ed94f3cc7089fbed",
+  "seq": 7,
+  "url": "rules-7.tar.gz",
+  "sha256": "1b3d5da94418b4f064f53dd1ef98936f5c0c441fd7bee66791e97e93caf32b16",
   "sig": {
     "alg": "ed25519",
     "key_id": "75eef42e119d4dda",
-    "sig": "Iq8Er2vXxuhzZ6qbR08NRiT7LwRJBYUg0tfEqv7Fn+pYB0BKPVh1u1fYR1Jwc8BxjbKnWAk4grDJgevaO4AqAg=="
+    "sig": "5hTrMftqQVeIYIBEfIU3FlrAXi29eTVA1O3lLVJqmPKeTNHlhgsm8ybF62/pRHbOcjlu/PkNcqSJMKQsvT5pDQ=="
   },
-  "signed_at": "2026-11-19T10:13:06Z",
+  "signed_at": "2026-11-19T12:30:36Z",
+  "expires_at": "2026-12-19T12:30:36Z",
   "pointer_sig": {
     "alg": "ed25519",
     "key_id": "75eef42e119d4dda",
-    "sig": "c9En/btsGrp+zjHiz6DGul3eH5wTXQFiq5OobG5S0JI2x167RPiBcGbNSj3TUPwcs88FMTcT173HRmVFdtYPBQ=="
+    "sig": "JZjxxhKhiH1be9Pxhn8dqPaJ+4AuzPDgip1pEbW6A2wPQnUWk2gwANbTspQOBa543HobNUtAvDT9uALz9WXOCA=="
   }
 }

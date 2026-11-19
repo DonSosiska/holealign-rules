@@ -97,7 +97,7 @@ jobs:
           KEY_FILE: ${{ runner.temp }}/rules-signing.key
         run: |
           set -euo pipefail
-          "$HOLEALIGN_SERVER" rules sign -key "$KEY_FILE" "$DIST/rules-$SEQ.tar.gz"
+          "$HOLEALIGN_SERVER" rules sign -key "$KEY_FILE" -expires 720h "$DIST/rules-$SEQ.tar.gz"
 
       - name: Remove signing key
         if: always()
@@ -113,7 +113,7 @@ jobs:
         run: |
           set -euo pipefail
           pub="$(tr -d '[:space:]' < keys/rules-public.key)"
-          "$HOLEALIGN_SERVER" rules verify -pub "$pub" "$DIST/rules-$SEQ.tar.gz"
+          "$HOLEALIGN_SERVER" rules verify -pub "$pub" -pointer "$DIST/latest.json" "$DIST/rules-$SEQ.tar.gz"
           ls -l "$DIST"
 
       - name: GitHub release

@@ -2,7 +2,8 @@ name: bot
 
 on:
   schedule:
-    - cron: "0 6 * * *"
+    # Off the top of the hour: GitHub delays or drops many scheduled runs queued at :00.
+    - cron: "23 5 * * *"
   workflow_dispatch:
     inputs:
       mode:

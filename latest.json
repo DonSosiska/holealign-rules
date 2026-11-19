@@ -1,10 +1,10 @@
 {
-  "seq": 4,
-  "url": "rules-4.tar.gz",
-  "sha256": "a354b2a25c4f6afbca9f18ec966dc40676dc90ffac9f23d6492e97b65db50906",
+  "seq": 5,
+  "url": "rules-5.tar.gz",
+  "sha256": "f8e54432444d84f770c558958a41bed6fb91c801112972355e4a34f99901b738",
   "sig": {
     "alg": "ed25519",
     "key_id": "75eef42e119d4dda",
-    "sig": "blNCPtAj+VnHH3zsSMxODQ88h17qi9rlgFiLBJ00rcnWj1Mo0QwNaH86KeuQdybMIwbQlS9n/4G+L/HB3aiGAQ=="
+    "sig": "e5Ajvwo9Z6ECKTEnc9GkDUj7IEEknYTT28la1NyPswlbQIUidUJizTLMQmlP6tAKH5PO93VNN7ouH1TC6+6BAQ=="
   }
 }
